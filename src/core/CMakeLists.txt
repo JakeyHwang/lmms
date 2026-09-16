@@ -91,6 +91,8 @@ set(LMMS_SRCS
 	core/VstSyncController.cpp
 	core/StepRecorder.cpp
 
+	core/ai/AiConfig.cpp
+
 	core/audio/AudioAlsa.cpp
 	core/audio/AudioDevice.cpp
 	core/audio/AudioFileDevice.cpp
