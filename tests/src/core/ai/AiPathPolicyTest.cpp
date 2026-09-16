@@ -28,6 +28,7 @@
 #include "AiPathPolicy.h"
 #include "AiToolRegistry.h"
 #include "AiTools.h"
+#include "ConfigManager.h"
 #include "lmmsconfig.h"
 
 class AiPathPolicyTest : public QObject
@@ -87,6 +88,21 @@ private slots:
 		p.allowFromUserText("everything under C:/loops/ and also C:/x/../secret/");
 		QVERIFY(p.allows("C:/loops/deep/er/x.wav"));
 		QVERIFY(!p.allows("C:/secret/x.wav"));
+		p.allowFromUserText("see `F:/tick/a.xpf` or (C:/x/y.xpf); also [G:/z/w.wav]: done");
+		QVERIFY(p.allows("F:/tick/a.xpf"));
+		QVERIFY(p.allows("C:/x/y.xpf"));
+		QVERIFY(p.allows("G:/z/w.wav"));
+		QVERIFY(!p.allows("C:/x/y.xpf)"));
+	}
+	void userTextNeverGrantsWholeDrive()
+	{
+		lmms::AiPathPolicy p;
+		p.allowFromUserText("look on D:/, on E:\\ and in /, as well as H:/ok/");
+		QCOMPARE(p.roots().size(), 1);
+		QVERIFY(!p.allows("D:/anything.wav"));
+		QVERIFY(!p.allows("E:/anything.wav"));
+		QVERIFY(!p.allows("/etc/passwd"));
+		QVERIFY(p.allows("H:/ok/x.wav"));
 	}
 	void getPresetXmlHonoursPolicy()
 	{
@@ -152,6 +168,32 @@ private slots:
 				"<instrumenttracksettings><instrumenttrack name=\"x\"/></instrumenttracksettings></lmms-project>");
 		}
 		QVERIFY(!reg.call("get_preset_xml", {{"path", zyn}})["ok"].toBool());
+		const QString local = dir.filePath("local.xpf");   // "local:" plugin path: only valid inside a project dir
+		{
+			QFile f(local);
+			QVERIFY(f.open(QIODevice::WriteOnly));
+			f.write("<?xml version=\"1.0\"?><lmms-project version=\"999\" type=\"instrumenttracksettings\"><head/>"
+				"<instrumenttracksettings><instrumenttrack name=\"x\"><instrument name=\"vestige\">"
+				"<vestige plugin=\"local:evil.dll\"/></instrument></instrumenttrack></instrumenttracksettings></lmms-project>");
+		}
+		auto r = reg.call("get_preset_xml", {{"path", local}});
+		QVERIFY(!r["ok"].toBool());
+		QVERIFY(r["error"].toString().contains("local plugin"));
+	}
+	//! A factory preset with legacy <ladspacontrols port..> attributes: DataFile used to raise a modal
+	//! QMessageBox for these unconditionally, which would hang a headless tool call.
+	void getPresetXmlLegacyLadspaPresetIsSilent()
+	{
+		const QString path = lmms::ConfigManager::inst()->factoryPresetsDir() + "TripleOscillator/E-Organ2.xpf";
+		if (!QFileInfo::exists(path)) { QSKIP(qPrintable("factory preset not found: " + path)); }
+		lmms::AiToolRegistry reg;
+		lmms::AiPathPolicy policy;
+		policy.setRoots({lmms::ConfigManager::inst()->factoryPresetsDir()});
+		lmms::registerAiDiscoveryTools(reg, policy);
+		auto r = reg.call("get_preset_xml", {{"path", path}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		QVERIFY(r["xml"].toString().startsWith("<instrumenttrack "));
+		QVERIFY(r["xml"].toString().contains("ladspacontrols"));
 	}
 };
 

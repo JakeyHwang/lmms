@@ -103,6 +103,7 @@ static QJsonObject presetXml(const AiPathPolicy& policy, const QString& path)
 	{
 		return R::error("Not an instrument preset: " + path);
 	}
+	if (df.hasLocalPlugins()) { return R::error("Preset references local plugin paths: " + path); }
 	QDomElement track = df.content().firstChildElement("instrumenttrack");
 	if (track.isNull()) { return R::error("Preset has no <instrumenttrack>: " + path); }
 	QString out;

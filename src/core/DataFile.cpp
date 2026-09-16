@@ -2035,8 +2035,17 @@ void DataFile::findProblematicLadspaPlugins()
 
 	if (numberOfProblematicPlugins > 0)
 	{
-		QMessageBox::warning(nullptr, QObject::tr("LADSPA plugins"),
-			QObject::tr("The project contains %1 LADSPA plugin(s) which might have not been restored correctly! Please check the project.").arg(numberOfProblematicPlugins));
+		const QString text = QObject::tr("The project contains %1 LADSPA plugin(s) which might have not been restored correctly! Please check the project.").arg(numberOfProblematicPlugins);
+		// Only interrupt the user for a file they opened; data parsed from memory (e.g. by the AI
+		// Composer tools) must never raise a modal dialog.
+		if (gui::getGUI() != nullptr && !m_fileName.isEmpty())
+		{
+			QMessageBox::warning(nullptr, QObject::tr("LADSPA plugins"), text);
+		}
+		else
+		{
+			qWarning() << text;
+		}
 	}
 }
 
