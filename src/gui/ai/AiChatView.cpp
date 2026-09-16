@@ -93,6 +93,8 @@ AiChatView::AiChatView() :
 	m_transcript = new QTextBrowser;
 	m_transcript->setOpenLinks(false);
 	m_status = new QLabel;
+	m_status->setWordWrap(true);
+	m_status->setTextFormat(Qt::PlainText);
 	m_input = new QPlainTextEdit;
 	m_input->setPlaceholderText(tr("Describe the music you want… (Enter to send, Shift+Enter for a new line)"));
 	m_input->setFixedHeight(70);
@@ -119,6 +121,7 @@ AiChatView::AiChatView() :
 	m_stack->addWidget(m_chat);
 	auto layout = new QVBoxLayout(this);
 	layout->addWidget(m_stack);
+	setFocusProxy(m_input);
 	reloadConfig();
 	setBusyUi(false);
 
@@ -211,6 +214,9 @@ void AiChatView::onTextDelta(const QString& text)
 
 void AiChatView::onToolStarted(const QString& name, const QJsonObject& args)
 {
+	// Text streamed before this call is a finished paragraph; show it above the tool line.
+	appendAssistantBlock(m_streaming);
+	m_streaming.clear();
 	const QString argStr = QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)).left(200);
 	appendBlock("<div style='color:#8aa;margin-left:12px'>▸ " + name.toHtmlEscaped() + " " + argStr.toHtmlEscaped()
 		+ "</div>");

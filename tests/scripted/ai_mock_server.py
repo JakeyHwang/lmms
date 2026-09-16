@@ -40,7 +40,10 @@ STATE = {"step": 0, "tracks": []}
 
 
 def learn_tracks(msgs):
-	"""Collect track indices from add_instrument_track results, in call order."""
+	"""Collect track indices from this turn's add_instrument_track results, in call order.
+	Earlier turns' results stay in the history but their tracks are not this turn's $T placeholders."""
+	turn_start = max((i for i, m in enumerate(msgs) if m.get("role") == "user"), default=0)
+	msgs = msgs[turn_start:]
 	call_names = {}
 	for m in msgs:
 		if m.get("role") == "assistant":
