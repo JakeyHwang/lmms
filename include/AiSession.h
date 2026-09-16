@@ -29,6 +29,7 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 #include "AiClient.h"
 #include "lmms_export.h"
@@ -70,16 +71,18 @@ protected:
 
 private:
 	void request();
-	void onCompleted(const QJsonObject& msg);
+	void onCompleted(const QJsonObject& assistantMessage);
 	void onFailed(const QString& err);
 	void finishTurn(const QString& text);
 	void failTurn(const QString& err);
 	void elideIfLarge();
+	void answerPendingToolCalls();
 
 	AiClient* m_client;
 	AiToolRegistry* m_registry;
 	QJsonArray m_history;
 	QString m_systemPrompt;
+	QStringList m_pendingCalls;      // tool_call ids of the current assistant message not yet answered
 	int m_turnStartIndex = 0;
 	int m_toolCalls = 0;
 	int m_consecutiveErrors = 0;

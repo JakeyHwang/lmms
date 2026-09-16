@@ -51,8 +51,8 @@ void AiSession::setSystemPrompt(const QString& text)
 
 void AiSession::clear()
 {
+	if (m_busy) { stop(); }
 	m_history = QJsonArray{QJsonObject{{"role", "system"}, {"content", m_systemPrompt}}};
-	m_busy = false;
 }
 
 bool AiSession::busy() const { return m_busy; }
@@ -65,6 +65,7 @@ void AiSession::submit(const QString& userText)
 	m_turnStartIndex = m_history.size();
 	m_toolCalls = 0;
 	m_consecutiveErrors = 0;
+	m_pendingCalls.clear();
 	m_history.append(QJsonObject{{"role", "user"}, {"content", userText}});
 	beginTurnCheckpoint();
 	request();
@@ -84,12 +85,20 @@ void AiSession::request()
 	m_client->send(m_history, m_registry->specs());
 }
 
-void AiSession::onCompleted(const QJsonObject& msg)
+void AiSession::onCompleted(const QJsonObject& assistantMessage)
 {
 	if (!m_busy) { return; }
-	m_history.append(msg);
+	QJsonObject msg = assistantMessage;
 	const auto calls = msg["tool_calls"].toArray();
-	if (calls.isEmpty()) { finishTurn(msg["content"].toString()); return; }
+	if (calls.isEmpty())
+	{
+		msg.remove("tool_calls"); // an empty array is a plain-text reply; don't send it back
+		m_history.append(msg);
+		finishTurn(msg["content"].toString());
+		return;
+	}
+	m_history.append(msg);
+	for (const auto& v : calls) { m_pendingCalls << v.toObject()["id"].toString(); }
 	for (const auto& v : calls)
 	{
 		const auto call = v.toObject();
@@ -105,13 +114,17 @@ void AiSession::onCompleted(const QJsonObject& msg)
 		}
 		emit status(tr("Running %1…").arg(name));
 		emit toolCallStarted(name, args);
+		if (!m_busy) { return; } // stop() from a slot
 		const QJsonObject result = perr.error == QJsonParseError::NoError
 			? m_registry->call(name, args)
 			: AiToolRegistry::error("Arguments are not valid JSON: " + perr.errorString());
-		emit toolCallFinished(name, result);
+		if (!m_busy) { return; } // stop() from inside the handler; failTurn already answered the call
 		m_consecutiveErrors = result["ok"].toBool() ? 0 : m_consecutiveErrors + 1;
 		m_history.append(QJsonObject{{"role", "tool"}, {"tool_call_id", call["id"].toString()},
 			{"content", QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))}});
+		m_pendingCalls.removeFirst();
+		emit toolCallFinished(name, result);
+		if (!m_busy) { return; }
 		if (m_consecutiveErrors >= MaxConsecutiveToolErrors)
 		{
 			failTurn(tr("Stopped: %1 consecutive tool errors").arg(MaxConsecutiveToolErrors));
@@ -140,9 +153,22 @@ void AiSession::finishTurn(const QString& text)
 void AiSession::failTurn(const QString& err)
 {
 	m_busy = false;
+	answerPendingToolCalls();
 	endTurnCheckpoint();
 	emit status(err);
 	emit turnFailed(err);
+}
+
+// Keeps history OpenAI-valid when a turn ends mid-dispatch: every tool_call id
+// of the last assistant message must have a tool reply before the next request.
+void AiSession::answerPendingToolCalls()
+{
+	for (const auto& id : m_pendingCalls)
+	{
+		m_history.append(QJsonObject{{"role", "tool"}, {"tool_call_id", id},
+			{"content", "{\"ok\":false,\"error\":\"turn stopped\"}"}});
+	}
+	m_pendingCalls.clear();
 }
 
 void AiSession::elideIfLarge()
