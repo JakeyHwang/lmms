@@ -8,7 +8,7 @@ Status: approved design, pending implementation plan
 An in-app chat panel through which a user instructs an LLM to create and edit
 music in the open LMMS project. The AI must be able to do anything LMMS can
 persist (tracks, instruments, notes, effects, mixer routing, automation,
-tempo, scales, …) plus runtime actions (play, stop, render, save, undo).
+tempo, scales, …) plus runtime actions (play, stop, render, save).
 
 Decisions made during brainstorming:
 
@@ -24,7 +24,7 @@ Decisions made during brainstorming:
 
 - Generated-audio providers (Suno/MusicGen style).
 - Chat persistence across sessions, multiple sessions, image/audio input.
-- Diff preview before applying changes (undo covers it).
+- Diff preview before applying changes (per-turn revert covers it).
 - Anthropic-native or other non-OpenAI-shaped APIs.
 - Any network surface exposed *by* LMMS (no HTTP/OSC server).
 
@@ -36,7 +36,7 @@ gui/ai/AiChatView  --prompt-->  core/ai/AiSession  --HTTP JSON-->  core/ai/OpenA
                                       +--tool call-->  core/ai/AiToolRegistry
                                                             |-- ProjectTools   (DataFile / Track / Song / Mixer)
                                                             |-- DiscoveryTools (PluginFactory, presets, samples)
-                                                            +-- ActionTools    (play / stop / render / save / undo)
+                                                            +-- ActionTools    (play / stop / render / save / new_project)
 gui/SetupDialog "AI" page  --> ConfigManager ai/baseUrl, ai/apiKey, ai/model
 ```
 
@@ -66,8 +66,9 @@ settings; the settings page says so.
 - **AiToolRegistry** — entries `{name, description, JSON schema, handler}`;
   `handler(QJsonObject args) -> QJsonObject result`; produces the `tools`
   array for the API. Handlers run on the GUI thread.
-- **AiSession** — owns message history; runs the loop; one
-  `ProjectJournal` checkpoint per user turn; `stop()`, `clear()`.
+- **AiSession** — owns message history; runs the loop; snapshots the whole
+  project (`Song::saveProjectData` into a `DataFile`) before each user turn and
+  `revertLastTurn()` reloads it through `Song::loadProject`; `stop()`, `clear()`.
 - **ProjectTools / DiscoveryTools / ActionTools** — handlers, see §2.
 
 ## 2. Tool surface
@@ -111,7 +112,7 @@ accepts).
 
 `play(fromBar?)`, `stop`, `render(path, format = wav|flac|ogg|mp3)` via
 `RenderManager` (tool completes when `finished()` fires), `save(path?)`,
-`new_project`, `undo` (one journal step).
+`new_project`.
 
 ### Guarantees
 
@@ -163,7 +164,7 @@ accepts).
 ### AiChatView (`src/gui/ai/AiChatView.{h,cpp}`)
 
 Registered via `MainWindow::addWindowedWidget`; toggled from
-*View → AI Composer* (`Ctrl+Shift+A`) and a toolbar button, following the
+*View → AI Composer* (`Ctrl+Alt+A`) and a toolbar button, following the
 Controller Rack pattern.
 
 Layout, top to bottom:
@@ -174,7 +175,9 @@ Layout, top to bottom:
   red.
 - Status line: "Thinking…", "Running add_effect…", "Done (7 tools, 12 s)".
 - Input: multi-line `QPlainTextEdit`; Enter sends, Shift+Enter newline.
-  Buttons: Send/Stop (toggles during a turn), New chat, Undo turn.
+  Buttons: Send/Stop (toggles during a turn), New chat, Revert turn (enabled
+  after a turn that ran tools; reloads the pre-turn snapshot, which also
+  discards edits made after the turn).
 - No API key configured → the transcript area is replaced by a banner with an
   "Open Settings" link.
 
@@ -188,8 +191,10 @@ stored in plaintext in `.lmmsrc.xml`.
 
 Tool mutations flow through existing `dataChanged` / `trackAdded` signals, so
 Song Editor, Piano Roll and Mixer repaint without extra wiring. Tools that add
-a track scroll the Song Editor to it. Undo works because each turn is one
-journal checkpoint.
+a track scroll the Song Editor to it. Revert reloads a full pre-turn project
+snapshot: the `ProjectJournal` cannot restore a whole song (`Song::restoreState`
+deletes tracks under their views and never covers `<head>`), so journalling is
+simply off during a turn.
 
 ## 5. Threading, errors, safety
 
@@ -210,7 +215,8 @@ Errors:
   in the transcript.
 - Network/HTTP/auth/parse failures → the turn ends, a red message appears,
   and history is rolled back to before the failed request so retry is clean.
-- Handlers catch everything; a turn's journal checkpoint always allows undo.
+- Handlers catch everything; the pre-turn snapshot always allows a revert once
+  a tool has run.
 
 Safety:
 
