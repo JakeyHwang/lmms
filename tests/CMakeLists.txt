@@ -11,6 +11,7 @@ set(LMMS_TESTS
 	src/core/ProjectVersionTest.cpp
 	src/core/RelativePathsTest.cpp
 	src/core/TimelineTest.cpp
+	src/core/ai/AiToolRegistryTest.cpp
 	src/core/ai/OpenAiClientTest.cpp
 	src/core/ai/OpenAiStreamParserTest.cpp
 	src/tracks/AutomationTrackTest.cpp
