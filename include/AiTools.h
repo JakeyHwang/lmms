@@ -35,11 +35,15 @@ namespace lmms
 {
 
 class AiToolRegistry;
+class AiPathPolicy;
 
 //! Project tools: summary, head (tempo/time signature/master), tracks, clips, notes, effects,
 //! parameters, automation, sample clips. `pathAllowed`, when set, gates every file path a tool
 //! would read (add_sample_clip); an unset callback allows everything.
 LMMS_EXPORT void registerAiProjectTools(AiToolRegistry& r, std::function<bool(const QString&)> pathAllowed = {});
+
+//! Discovery tools: list instruments/effects/presets/samples, read a preset's XML (paths gated by `policy`).
+LMMS_EXPORT void registerAiDiscoveryTools(AiToolRegistry& r, AiPathPolicy& policy);
 
 } // namespace lmms
 
