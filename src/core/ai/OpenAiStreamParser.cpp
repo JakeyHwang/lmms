@@ -45,6 +45,11 @@ void OpenAiStreamParser::feed(const QByteArray& chunk)
 			if (data == "[DONE]") { continue; } // finish is set by finish_reason
 			handleEvent(data);
 		}
+		else if (line.startsWith(':') || line.startsWith("event:") || line.startsWith("id:") || line.startsWith("retry:"))
+		{
+			// SSE comment/keepalive (e.g. ": OPENROUTER PROCESSING") or a field we don't use
+			m_sawSse = true;
+		}
 		else if (!line.isEmpty() && !m_sawSse)
 		{
 			// not SSE: keep whole body until end()

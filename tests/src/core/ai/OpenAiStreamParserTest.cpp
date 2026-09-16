@@ -16,6 +16,16 @@ private slots:
 		QCOMPARE(p.message()["content"].toString(), QString("Hello"));
 		QCOMPARE(p.textDeltas(), QStringList({"Hel", "lo"}));
 	}
+	void commentLineBeforeFirstData()
+	{
+		lmms::OpenAiStreamParser p;
+		p.feed(": OPENROUTER PROCESSING\n\n");
+		p.feed("event: message\nid: 1\ndata: {\"choices\":[{\"delta\":{\"content\":\"Hi\"},\"finish_reason\":\"stop\"}]}\n\n");
+		p.end();
+		QVERIFY(p.finished());
+		QVERIFY(p.error().isEmpty());
+		QCOMPARE(p.message()["content"].toString(), QString("Hi"));
+	}
 	void streamedToolCallsSplitAcrossChunks()
 	{
 		lmms::OpenAiStreamParser p;
