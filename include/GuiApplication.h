@@ -36,6 +36,7 @@ class QSocketNotifier;
 namespace lmms::gui
 {
 
+class AiChatView;
 class AutomationEditorWindow;
 class ControllerRackView;
 class MixerView;
@@ -80,6 +81,7 @@ public:
 	MicrotunerConfig* getMicrotunerConfig() { return m_microtunerConfig; }
 	AutomationEditorWindow* automationEditor() { return m_automationEditor; }
 	ControllerRackView* getControllerRackView() { return m_controllerRackView; }
+	AiChatView* aiChatView() { return m_aiChatView; }
 
 	//! File descriptors for unix socketpair, used to receive SIGINT
 	static inline int s_sigintFd[2];
@@ -103,6 +105,7 @@ private:
 	ProjectNotes* m_projectNotes;
 	MicrotunerConfig* m_microtunerConfig;
 	ControllerRackView* m_controllerRackView;
+	AiChatView* m_aiChatView;
 	QLabel* m_loadingProgressLabel;
 	QSocketNotifier* m_sigintNotifier;
 };

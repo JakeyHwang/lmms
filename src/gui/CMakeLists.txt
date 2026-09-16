@@ -44,6 +44,8 @@ SET(LMMS_SRCS
 	gui/SubWindow.cpp
 	gui/ToolPluginView.cpp
 
+	gui/ai/AiChatView.cpp
+
 	gui/clips/AutomationClipView.cpp
 	gui/clips/ClipView.cpp
 	gui/clips/MidiClipView.cpp
