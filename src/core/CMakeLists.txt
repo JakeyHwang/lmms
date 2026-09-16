@@ -92,6 +92,8 @@ set(LMMS_SRCS
 	core/StepRecorder.cpp
 
 	core/ai/AiConfig.cpp
+	core/ai/OpenAiClient.cpp
+	core/ai/OpenAiStreamParser.cpp
 
 	core/audio/AudioAlsa.cpp
 	core/audio/AudioDevice.cpp
