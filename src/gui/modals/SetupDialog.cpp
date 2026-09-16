@@ -25,13 +25,16 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFormLayout>
 #include <QGroupBox>
 #include <QImageReader>
 #include <QLabel>
 #include <QLayout>
 #include <QLineEdit>
+#include <QPointer>
 #include <QScrollArea>
 
+#include "AiConfig.h"
 #include "AudioEngine.h"
 #include "embed.h"
 #include "Engine.h"
@@ -39,6 +42,7 @@
 #include "MainWindow.h"
 #include "MidiSetupWidget.h"
 #include "ProjectJournal.h"
+#include "OpenAiClient.h"
 #include "SetupDialog.h"
 #include "TabBar.h"
 #include "TabButton.h"
@@ -867,6 +871,69 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	paths_layout->addWidget(pathsScroll, 1);
 	paths_layout->addStretch();
 
+
+	// AI widget.
+	auto ai_w = new QWidget(settings_w);
+
+	auto ai_layout = new QVBoxLayout(ai_w);
+	ai_layout->setSpacing(10);
+	ai_layout->setContentsMargins(0, 0, 0, 0);
+
+	labelWidget(ai_w, tr("AI Composer"));
+
+	const AiConfig aiConfig = AiConfig::load();
+	m_aiBaseUrl = aiConfig.baseUrl;
+	m_aiApiKey = aiConfig.apiKey;
+	m_aiModel = aiConfig.model;
+
+	// AI endpoint group
+	auto aiEndpointBox = new QGroupBox(tr("OpenAI-compatible endpoint"), ai_w);
+	auto aiEndpointLayout = new QFormLayout(aiEndpointBox);
+
+	auto aiBaseUrlLineEdit = new QLineEdit(m_aiBaseUrl, aiEndpointBox);
+	aiBaseUrlLineEdit->setPlaceholderText(AiConfig::DefaultBaseUrl);
+	connect(aiBaseUrlLineEdit, &QLineEdit::textChanged,
+			this, &SetupDialog::setAiBaseUrl);
+	aiEndpointLayout->addRow(tr("Base URL"), aiBaseUrlLineEdit);
+
+	m_aiKeyLineEdit = new QLineEdit(m_aiApiKey, aiEndpointBox);
+	m_aiKeyLineEdit->setEchoMode(QLineEdit::Password);
+	connect(m_aiKeyLineEdit, &QLineEdit::textChanged,
+			this, &SetupDialog::setAiApiKey);
+	auto aiShowKeyCheckBox = new QCheckBox(tr("Show"), aiEndpointBox);
+	connect(aiShowKeyCheckBox, &QCheckBox::toggled,
+			this, &SetupDialog::toggleAiKeyVisible);
+	auto aiKeyLayout = new QHBoxLayout;
+	aiKeyLayout->addWidget(m_aiKeyLineEdit, 1);
+	aiKeyLayout->addWidget(aiShowKeyCheckBox, 0);
+	aiEndpointLayout->addRow(tr("API key"), aiKeyLayout);
+
+	auto aiModelLineEdit = new QLineEdit(m_aiModel, aiEndpointBox);
+	aiModelLineEdit->setPlaceholderText(
+			tr("e.g. gpt-4o, or a model name from OpenRouter or Ollama"));
+	connect(aiModelLineEdit, &QLineEdit::textChanged,
+			this, &SetupDialog::setAiModel);
+	aiEndpointLayout->addRow(tr("Model"), aiModelLineEdit);
+
+	auto aiTestBtn = new QPushButton(tr("Test connection"), aiEndpointBox);
+	connect(aiTestBtn, &QPushButton::clicked,
+			this, &SetupDialog::testAiConnection);
+	m_aiTestResultLbl = new QLabel(aiEndpointBox);
+	m_aiTestResultLbl->setWordWrap(true);
+	auto aiTestLayout = new QHBoxLayout;
+	aiTestLayout->addWidget(aiTestBtn, 0);
+	aiTestLayout->addWidget(m_aiTestResultLbl, 1);
+	aiEndpointLayout->addRow(QString(), aiTestLayout);
+
+	auto aiKeyNoteLbl = new QLabel(
+			tr("The API key is stored in plain text in your LMMS "
+				"configuration file (.lmmsrc.xml)."), aiEndpointBox);
+	aiKeyNoteLbl->setWordWrap(true);
+	aiEndpointLayout->addRow(QString(), aiKeyNoteLbl);
+
+	ai_layout->addWidget(aiEndpointBox);
+	ai_layout->addStretch();
+
 	// Add all main widgets to the layout of the settings widget
 	// This is needed so that we automatically get the correct sizes.
 	settingsLayout->addWidget(general_w);
@@ -874,6 +941,7 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	settingsLayout->addWidget(audio_w);
 	settingsLayout->addWidget(midi_w);
 	settingsLayout->addWidget(paths_w);
+	settingsLayout->addWidget(ai_w);
 
 	// Major tabs ordering.
 	m_tabBar->addTab(general_w,
@@ -889,8 +957,11 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 			tr("MIDI"), 3, false, true, false)->setIcon(
 					embed::getIconPixmap("setup_midi"));
 	m_tabBar->addTab(paths_w,
-			tr("Paths"), 4, true, true, false)->setIcon(
+			tr("Paths"), 4, false, true, false)->setIcon(
 					embed::getIconPixmap("setup_directories"));
+	m_tabBar->addTab(ai_w,
+			tr("AI"), 5, true, true, false)->setIcon(
+					embed::getIconPixmap("setup_general"));
 
 	m_tabBar->setActiveTab(static_cast<int>(tab_to_open));
 
@@ -1047,6 +1118,7 @@ void SetupDialog::accept()
 	{
 		it.value()->saveSettings();
 	}
+	AiConfig::save({m_aiBaseUrl, m_aiApiKey, m_aiModel});
 	ConfigManager::inst()->saveConfigFile();
 }
 
@@ -1483,6 +1555,56 @@ void SetupDialog::setBackgroundPicFile(const QString & backgroundPicFile)
 	m_backgroundPicFile = backgroundPicFile;
 }
 
+
+
+
+
+// AI settings slots.
+
+void SetupDialog::setAiBaseUrl(const QString & baseUrl)
+{
+	m_aiBaseUrl = baseUrl;
+}
+
+
+void SetupDialog::setAiApiKey(const QString & apiKey)
+{
+	m_aiApiKey = apiKey;
+}
+
+
+void SetupDialog::setAiModel(const QString & model)
+{
+	m_aiModel = model;
+}
+
+
+void SetupDialog::toggleAiKeyVisible(bool visible)
+{
+	m_aiKeyLineEdit->setEchoMode(visible ? QLineEdit::Normal : QLineEdit::Password);
+}
+
+
+void SetupDialog::testAiConnection()
+{
+	m_aiTestResultLbl->setText(tr("Testing..."));
+
+	AiConfig config{m_aiBaseUrl.trimmed(), m_aiApiKey, m_aiModel};
+	while (config.baseUrl.endsWith('/')) { config.baseUrl.chop(1); }
+
+	// The client is owned by the dialog, so closing the dialog before the
+	// reply arrives destroys the client and drops the pending callback. The
+	// QPointer additionally guards the label in case it goes away first.
+	auto client = new OpenAiClient(std::move(config), this);
+	QPointer<QLabel> resultLbl = m_aiTestResultLbl;
+	client->testConnection([client, resultLbl](bool ok, QString message) {
+		if (resultLbl)
+		{
+			resultLbl->setText((ok ? QStringLiteral("\u2713 ") : QStringLiteral("\u2717 ")) + message);
+		}
+		client->deleteLater();
+	});
+}
 
 
 

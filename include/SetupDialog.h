@@ -58,7 +58,8 @@ public:
 		PerformanceSettings,
 		AudioSettings,
 		MidiSettings,
-		PathsSettings
+		PathsSettings,
+		AiSettings
 	};
 
 	SetupDialog(ConfigTab tab_to_open = ConfigTab::GeneralSettings);
@@ -128,6 +129,13 @@ private slots:
 	void setThemeDir(const QString & themeDir);
 	void openBackgroundPicFile();
 	void setBackgroundPicFile(const QString & backgroundPicFile);
+
+	// AI settings widget.
+	void setAiBaseUrl(const QString & baseUrl);
+	void setAiApiKey(const QString & apiKey);
+	void setAiModel(const QString & model);
+	void toggleAiKeyVisible(bool visible);
+	void testAiConnection();
 
 	void showRestartWarning();
 
@@ -220,6 +228,13 @@ private:
 	QLineEdit * m_sf2FileLineEdit;
 #endif
 	QLineEdit * m_backgroundPicFileLineEdit;
+
+	// AI settings widgets.
+	QString m_aiBaseUrl;
+	QString m_aiApiKey;
+	QString m_aiModel;
+	QLineEdit * m_aiKeyLineEdit;
+	QLabel * m_aiTestResultLbl;
 
 	QLabel * restartWarningLbl;
 };
