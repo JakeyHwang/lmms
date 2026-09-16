@@ -47,9 +47,11 @@ private slots:
 		QVERIFY(allowed.isValid() && forbidden.isValid());
 		lmms::Engine::init(true);
 		lmms::registerAiProjectTools(reg);
+		// Canonical on both sides: Windows temp paths may come back as 8.3 short names.
 		const QString root = QDir(allowed.path()).canonicalPath();
 		lmms::registerAiActionTools(reg, [root](const QString& p) {
-			return QFileInfo(p).absoluteFilePath().startsWith(root + "/", Qt::CaseInsensitive);
+			const QString dir = QFileInfo(p).absoluteDir().canonicalPath();
+			return !dir.isEmpty() && (dir == root || dir.startsWith(root + "/", Qt::CaseInsensitive));
 		});
 	}
 	void cleanupTestCase() { lmms::Engine::destroy(); }
@@ -62,6 +64,17 @@ private slots:
 		QVERIFY(!r["ok"].toBool());
 		QVERIFY(r["error"].toString().contains("not allowed"));
 		QVERIFY(!QFileInfo::exists(evil));
+	}
+	void saveRejectsUnwritablePaths()
+	{
+		auto missingDir = reg.call("save", {{"path", allowed.path() + "/nodir/out.mmp"}});
+		QVERIFY(!missingDir["ok"].toBool());
+		QVERIFY(missingDir["error"].toString().contains("directory"));
+		QVERIFY(!QFileInfo::exists(allowed.path() + "/nodir"));
+		auto isDir = reg.call("save", {{"path", allowed.path()}});
+		QVERIFY(!isDir["ok"].toBool());
+		QVERIFY(isDir["error"].toString().contains("directory"));
+		QVERIFY(!QFileInfo::exists(allowed.path() + ".mmp"));
 	}
 	void saveWritesMmpAndAppendsExtension()
 	{
@@ -82,11 +95,18 @@ private slots:
 		QFile f(written);
 		QVERIFY(f.open(QIODevice::ReadOnly));
 		QVERIFY(f.readAll().contains("bpm=\"77\""));
-		// An explicit .mmp extension is kept as is.
+		// An explicit .mmp extension is kept as is; a differently-cased one is not an extension.
 		auto explicitExt = reg.call("save", {{"path", allowed.path() + "/two.mmp"}});
 		QVERIFY(explicitExt["ok"].toBool());
 		QCOMPARE(explicitExt["path"].toString(), allowed.path() + "/two.mmp");
 		QVERIFY(QFileInfo(allowed.path() + "/two.mmp").size() > 0);
+		auto upper = reg.call("save", {{"path", allowed.path() + "/three.MMP"}});
+		QVERIFY(upper["ok"].toBool());
+		QCOMPARE(upper["path"].toString(), allowed.path() + "/three.MMP.mmp");
+		QCOMPARE(song()->projectFileName(), allowed.path() + "/three.MMP.mmp");
+		QVERIFY(QFileInfo(allowed.path() + "/three.MMP.mmp").size() > 0);
+		QVERIFY(!QFileInfo::exists(allowed.path() + "/three.MMP"));
+		QVERIFY(!QFileInfo::exists(allowed.path() + "/three.MMP.mmpz"));
 	}
 	void newProjectClearsFileName()
 	{
@@ -100,6 +120,33 @@ private slots:
 		auto s = reg.call("save", {});
 		QVERIFY(!s["ok"].toBool());
 		QVERIFY(s["error"].toString().contains("path"));
+	}
+	void newProjectGuardsUnsavedChanges()
+	{
+		QVERIFY(reg.call("save", {{"path", allowed.path() + "/guard.mmp"}})["ok"].toBool());
+		QVERIFY(!song()->isModified());
+		song()->setModified();
+		QVERIFY(song()->isModified());
+		auto refused = reg.call("new_project", {});
+		QVERIFY(!refused["ok"].toBool());
+		QVERIFY(refused["error"].toString().contains("discardChanges"));
+		QCOMPARE(song()->projectFileName(), allowed.path() + "/guard.mmp");
+		QVERIFY(!reg.call("new_project", {{"discardChanges", false}})["ok"].toBool());
+		auto r = reg.call("new_project", {{"discardChanges", true}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		QVERIFY(song()->projectFileName().isEmpty());
+		QVERIFY(!song()->isModified());
+	}
+	void newProjectKeepsJournallingState()
+	{
+		auto journal = lmms::Engine::projectJournal();
+		QVERIFY(journal->isJournalling());
+		journal->setJournalling(false);
+		QVERIFY(reg.call("new_project", {{"discardChanges", true}})["ok"].toBool());
+		QVERIFY(!journal->isJournalling());
+		journal->setJournalling(true);
+		QVERIFY(reg.call("new_project", {{"discardChanges", true}})["ok"].toBool());
+		QVERIFY(journal->isJournalling());
 	}
 	void undoWithEmptyJournalFails()
 	{
@@ -140,7 +187,7 @@ private slots:
 		QVERIFY(!reg.call("play", {{"fromBar", 0}})["ok"].toBool());
 		QVERIFY(!song()->isPlaying());
 	}
-	void renderRejectsDisallowedPathAndBadFormat()
+	void renderRejectsUnwritablePathsAndBadFormat()
 	{
 		const QString evil = forbidden.path() + "/evil";
 		QVERIFY(!reg.call("render", {{"path", evil}})["ok"].toBool());
@@ -148,6 +195,15 @@ private slots:
 		QVERIFY(!reg.call("render", {{"path", allowed.path() + "/x"}, {"format", "aiff"}})["ok"].toBool());
 		QVERIFY(!QFileInfo::exists(allowed.path() + "/x.wav"));
 		QVERIFY(!reg.call("render", {})["ok"].toBool());
+		auto missingDir = reg.call("render", {{"path", allowed.path() + "/nodir/mix"}});
+		QVERIFY(!missingDir["ok"].toBool());
+		QVERIFY(missingDir["error"].toString().contains("directory"));
+		QVERIFY(!QFileInfo::exists(allowed.path() + "/nodir"));
+		auto isDir = reg.call("render", {{"path", allowed.path()}, {"format", "wav"}});
+		QVERIFY(!isDir["ok"].toBool());
+		QVERIFY(isDir["error"].toString().contains("directory"));
+		QVERIFY(!QFileInfo::exists(allowed.path() + ".wav"));
+		QVERIFY(!song()->isExporting());
 	}
 	void renderWritesWav()
 	{
