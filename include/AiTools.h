@@ -41,6 +41,11 @@ class AiToolRegistry;
 //! would read (add_sample_clip); an unset callback allows everything.
 LMMS_EXPORT void registerAiProjectTools(AiToolRegistry& r, std::function<bool(const QString&)> pathAllowed = {});
 
+//! Action tools: play, stop, render, save, new_project, undo. `pathAllowed`, when set, gates every
+//! file path a tool would write (render, save); an unset callback allows everything. `render`
+//! blocks the calling thread until the export finishes.
+LMMS_EXPORT void registerAiActionTools(AiToolRegistry& r, std::function<bool(const QString&)> pathAllowed = {});
+
 } // namespace lmms
 
 #endif // LMMS_AI_TOOLS_H

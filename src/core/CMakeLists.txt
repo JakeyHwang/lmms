@@ -91,6 +91,7 @@ set(LMMS_SRCS
 	core/VstSyncController.cpp
 	core/StepRecorder.cpp
 
+	core/ai/AiActionTools.cpp
 	core/ai/AiConfig.cpp
 	core/ai/AiProjectTools.cpp
 	core/ai/AiPromptBuilder.cpp
