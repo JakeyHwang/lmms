@@ -92,6 +92,8 @@ set(LMMS_SRCS
 	core/StepRecorder.cpp
 
 	core/ai/AiConfig.cpp
+	core/ai/AiDiscoveryTools.cpp
+	core/ai/AiPathPolicy.cpp
 	core/ai/AiProjectTools.cpp
 	core/ai/AiSession.cpp
 	core/ai/AiToolRegistry.cpp

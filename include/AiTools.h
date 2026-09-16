@@ -31,9 +31,13 @@ namespace lmms
 {
 
 class AiToolRegistry;
+class AiPathPolicy;
 
 //! Project tools: summary, head (tempo/time signature/master), tracks, clips, notes, automation.
 LMMS_EXPORT void registerAiProjectTools(AiToolRegistry& r);
+
+//! Discovery tools: list instruments/effects/presets/samples, read a preset's XML (paths gated by `policy`).
+LMMS_EXPORT void registerAiDiscoveryTools(AiToolRegistry& r, AiPathPolicy& policy);
 
 } // namespace lmms
 
