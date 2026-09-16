@@ -49,6 +49,7 @@ public:
 
 private:
 	struct ToolCall { QString id; QString name; QString arguments; };
+	bool handleLine(const QByteArray& line); //!< false: line is not SSE and no SSE seen yet
 	void handleEvent(const QByteArray& data);
 	void handleChoice(const QJsonObject& choice, bool streaming);
 

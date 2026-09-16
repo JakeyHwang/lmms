@@ -36,36 +36,26 @@ void OpenAiStreamParser::feed(const QByteArray& chunk)
 	int nl;
 	while ((nl = m_buffer.indexOf('\n')) >= 0)
 	{
-		QByteArray line = m_buffer.left(nl).trimmed();
+		// not SSE: keep whole body until end()
+		if (!handleLine(m_buffer.left(nl).trimmed())) { return; }
 		m_buffer.remove(0, nl + 1);
-		if (line.startsWith("data:"))
-		{
-			m_sawSse = true;
-			QByteArray data = line.mid(5).trimmed();
-			if (data == "[DONE]") { continue; } // finish is set by finish_reason
-			handleEvent(data);
-		}
-		else if (line.startsWith(':') || line.startsWith("event:") || line.startsWith("id:") || line.startsWith("retry:"))
-		{
-			// SSE comment/keepalive (e.g. ": OPENROUTER PROCESSING") or a field we don't use
-			m_sawSse = true;
-		}
-		else if (!line.isEmpty() && !m_sawSse)
-		{
-			// not SSE: keep whole body until end()
-			m_buffer.prepend(line + '\n');
-			return;
-		}
 	}
 }
 
 void OpenAiStreamParser::end()
 {
-	if (m_sawSse || m_buffer.trimmed().isEmpty()) { return; }
-	QJsonParseError err;
-	auto doc = QJsonDocument::fromJson(m_buffer, &err);
+	QByteArray body = m_buffer.trimmed();
 	m_buffer.clear();
-	if (err.error != QJsonParseError::NoError) { m_error = "Unparseable response: " + err.errorString(); return; }
+	if (m_sawSse)
+	{
+		// drain an unterminated trailing line
+		if (!body.isEmpty()) { handleLine(body); }
+		return;
+	}
+	if (body.isEmpty()) { return; }
+	QJsonParseError err;
+	auto doc = QJsonDocument::fromJson(body, &err);
+	if (err.error != QJsonParseError::NoError) { m_error = "Unparseable response: " + QString::fromUtf8(body.left(200)); return; }
 	auto obj = doc.object();
 	if (obj.contains("error")) { m_error = obj["error"].toObject()["message"].toString("unknown error"); return; }
 	auto choices = obj["choices"].toArray();
@@ -74,9 +64,31 @@ void OpenAiStreamParser::end()
 	m_finished = true;
 }
 
+bool OpenAiStreamParser::handleLine(const QByteArray& line)
+{
+	if (line.startsWith("data:"))
+	{
+		m_sawSse = true;
+		QByteArray data = line.mid(5).trimmed();
+		if (data == "[DONE]") { if (m_error.isEmpty()) { m_finished = true; } }
+		else { handleEvent(data); }
+		return true;
+	}
+	if (line.startsWith(':') || line.startsWith("event:") || line.startsWith("id:") || line.startsWith("retry:"))
+	{
+		// SSE comment/keepalive (e.g. ": OPENROUTER PROCESSING") or a field we don't use
+		m_sawSse = true;
+		return true;
+	}
+	return line.isEmpty() || m_sawSse;
+}
+
 void OpenAiStreamParser::handleEvent(const QByteArray& data)
 {
-	auto obj = QJsonDocument::fromJson(data).object();
+	QJsonParseError err;
+	auto doc = QJsonDocument::fromJson(data, &err);
+	if (err.error != QJsonParseError::NoError) { m_error = "Malformed stream event: " + QString::fromUtf8(data.left(120)); return; }
+	auto obj = doc.object();
 	if (obj.contains("error")) { m_error = obj["error"].toObject()["message"].toString("unknown error"); return; }
 	auto choices = obj["choices"].toArray();
 	if (choices.isEmpty()) { return; }

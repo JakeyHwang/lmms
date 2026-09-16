@@ -60,9 +60,10 @@ void OpenAiClient::send(const QJsonArray& messages, const QJsonArray& tools)
 		for (const auto& d : m_parser->takeTextDeltas()) { emit textDelta(d); }
 		int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
 		if (!m_parser->error().isEmpty()) { emit failed(QString("HTTP %1: %2").arg(status).arg(m_parser->error())); return; }
+		// a fully parsed message wins over a late connection drop
+		if (m_parser->finished()) { emit completed(m_parser->message()); return; }
 		if (reply->error() != QNetworkReply::NoError) { emit failed(QString("HTTP %1: %2").arg(status).arg(reply->errorString())); return; }
-		if (!m_parser->finished()) { emit failed("Incomplete response from model"); return; }
-		emit completed(m_parser->message());
+		emit failed("Incomplete response from model");
 	});
 }
 

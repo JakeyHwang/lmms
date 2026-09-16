@@ -1,3 +1,27 @@
+/*
+ * OpenAiStreamParserTest.cpp
+ *
+ * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
+ *
+ * This file is part of LMMS - https://lmms.io
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public
+ * License along with this program (see COPYING); if not, write to the
+ * Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+ * Boston, MA 02110-1301 USA.
+ *
+ */
+
 #include "OpenAiStreamParser.h"
 #include <QtTest>
 #include <QJsonArray>
@@ -12,6 +36,35 @@ private slots:
 		lmms::OpenAiStreamParser p;
 		p.feed("data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"Hel\"}}]}\n\n");
 		p.feed("data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n");
+		QVERIFY(p.finished());
+		QCOMPARE(p.message()["content"].toString(), QString("Hello"));
+		QCOMPARE(p.textDeltas(), QStringList({"Hel", "lo"}));
+	}
+	void doneWithoutFinishReasonIsTerminal()
+	{
+		lmms::OpenAiStreamParser p;
+		p.feed("data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\n");
+		p.feed("data: {\"choices\":[{\"delta\":{\"content\":\"lo\"}}]}\n\n");
+		QVERIFY(!p.finished());
+		p.feed("data: [DONE]\n\n");
+		QVERIFY(p.finished());
+		QVERIFY(p.error().isEmpty());
+		QCOMPARE(p.message()["content"].toString(), QString("Hello"));
+	}
+	void doneAfterErrorEventIsNotTerminal()
+	{
+		lmms::OpenAiStreamParser p;
+		p.feed("data: {\"error\":{\"message\":\"quota\"}}\n\ndata: [DONE]\n\n");
+		QVERIFY(!p.finished());
+		QCOMPARE(p.error(), QString("quota"));
+	}
+	void unterminatedTrailingLineDrainedByEnd()
+	{
+		lmms::OpenAiStreamParser p;
+		p.feed("data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\n");
+		p.feed("data: {\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}");
+		QVERIFY(!p.finished());
+		p.end();
 		QVERIFY(p.finished());
 		QCOMPARE(p.message()["content"].toString(), QString("Hello"));
 		QCOMPARE(p.textDeltas(), QStringList({"Hel", "lo"}));
@@ -54,6 +107,21 @@ private slots:
 		p.end();
 		QVERIFY(!p.finished());
 		QCOMPARE(p.error(), QString("bad key"));
+	}
+	void nonJsonBodyErrorCarriesExcerpt()
+	{
+		lmms::OpenAiStreamParser p;
+		p.feed("<html>\n<body>502 Bad Gateway</body>\n</html>\n");
+		p.end();
+		QVERIFY(!p.finished());
+		QCOMPARE(p.error(), QString("Unparseable response: <html>\n<body>502 Bad Gateway</body>\n</html>"));
+	}
+	void malformedStreamEventIsAnError()
+	{
+		lmms::OpenAiStreamParser p;
+		p.feed("data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\ndata: {not json\n\n");
+		QVERIFY(!p.finished());
+		QCOMPARE(p.error(), QString("Malformed stream event: {not json"));
 	}
 };
 QTEST_GUILESS_MAIN(OpenAiStreamParserTest)

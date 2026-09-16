@@ -29,7 +29,7 @@
 #include <QTcpServer>
 #include <QTcpSocket>
 
-//! Minimal one-shot HTTP server: records the request, replies with a fixed response, closes.
+//! Minimal one-shot HTTP server: records the full request, replies with a fixed response, closes.
 class MockServer : public QTcpServer
 {
 public:
@@ -41,7 +41,7 @@ public:
 			auto sock = nextPendingConnection();
 			connect(sock, &QTcpSocket::readyRead, this, [this, sock] {
 				request += sock->readAll();
-				if (!request.contains("\r\n\r\n")) { return; }
+				if (!requestComplete()) { return; }
 				sock->write(m_response);
 				sock->disconnectFromHost();
 			});
@@ -51,6 +51,18 @@ public:
 	QByteArray request;
 
 private:
+	//! headers received and Content-Length bytes of body present
+	bool requestComplete() const
+	{
+		int headerEnd = request.indexOf("\r\n\r\n");
+		if (headerEnd < 0) { return false; }
+		int bodyLength = 0;
+		for (const auto& h : request.left(headerEnd).split('\n'))
+		{
+			if (h.toLower().startsWith("content-length:")) { bodyLength = h.mid(15).trimmed().toInt(); }
+		}
+		return request.size() - (headerEnd + 4) >= bodyLength;
+	}
 	QByteArray m_response;
 };
 
@@ -92,6 +104,20 @@ private slots:
 		QVERIFY(failed.wait(5000));
 		QCOMPARE(failed[0][0].toString(), QString("HTTP 401: bad key"));
 		QCOMPARE(completed.count(), 0);
+	}
+	void completeMessageWinsOverConnectionDrop()
+	{
+		// Content-Length overstates the body, so Qt reports RemoteHostClosedError after a fully parsed stream.
+		MockServer server(
+			"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: 9999\r\nConnection: close\r\n\r\n"
+			"data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n");
+		lmms::OpenAiClient c(server.config());
+		QSignalSpy completed(&c, &lmms::AiClient::completed);
+		QSignalSpy failed(&c, &lmms::AiClient::failed);
+		c.send(QJsonArray{}, {});
+		QVERIFY(completed.wait(5000));
+		QCOMPARE(failed.count(), 0);
+		QCOMPARE(completed[0][0].toJsonObject()["content"].toString(), QString("ok"));
 	}
 	void abortEmitsNothing()
 	{
