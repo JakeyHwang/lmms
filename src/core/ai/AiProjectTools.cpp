@@ -24,17 +24,31 @@
 
 #include "AiTools.h"
 
+#include <utility>
+#include <vector>
+
+#include <QCoreApplication>
+#include <QDomDocument>
 #include <QJsonArray>
+#include <QTextStream>
 
 #include "AiToolHelpers.h"
 #include "AudioEngine.h"
 #include "Clip.h"
+#include "DataFile.h"
+#include "DeprecationHelper.h"
+#include "GuiApplication.h"
 #include "MidiClip.h"
 #include "Mixer.h"
+#include "MixerView.h"
 #include "Note.h"
+#include "PatternStore.h"
 #include "PluginFactory.h"
+#include "SampleTrack.h"
+#include "SongEditor.h"
 #include "TimePos.h"
 #include "Track.h"
+#include "TrackView.h"
 #include "panning.h"
 #include "volume.h"
 
@@ -180,6 +194,201 @@ static QJsonObject addNotes(const QJsonObject& a)
 	return R::ok({{"track", a["track"].toInt()}, {"clipPos", clipPos.getTicks()}, {"noteCount", int(clip->notes().size())}});
 }
 
+// --- XML surface ---------------------------------------------------------------------------
+
+static constexpr int MaxXmlBytes = 64 * 1024;
+
+static QString elementToString(const QDomElement& e)
+{
+	QString out;
+	QTextStream ts(&out);
+	e.save(ts, 0);
+	return out.trimmed();
+}
+
+//! Parses a <track> or <mixer> fragment submitted by the model and imports it into `df`, a fresh
+//! SongProject DataFile, so the same security check as for .mmp files (hasLocalPlugins) applies.
+//! Nothing in the project is touched; on failure `*err` is set and `element` is null.
+static bool parseFragment(const QString& xml, const QString& expectedTag, DataFile& df, QDomElement& element, QString* err)
+{
+	QDomDocument probe;
+	QString perr;
+	int line = 0;
+	if (!setContent(probe, xml.toUtf8(), &perr, &line))
+	{
+		*err = QString("XML parse error at line %1: %2").arg(line).arg(perr);
+		return false;
+	}
+	const QDomElement root = probe.documentElement();
+	if (root.tagName() != expectedTag)
+	{
+		*err = QString("Root element must be <%1>, got <%2>").arg(expectedTag, root.tagName());
+		return false;
+	}
+	element = df.importNode(root, true).toElement();
+	df.content().appendChild(element);
+	if (df.hasLocalPlugins())
+	{
+		element = QDomElement();
+		*err = "XML references local plugin paths (local:), which is not allowed";
+		return false;
+	}
+	return true;
+}
+
+//! Track types a model may create; Event/Video are unimplemented and HiddenAutomation is never listed in the song.
+static bool creatableTrackType(const QDomElement& track, QString* err)
+{
+	bool isInt = false;
+	const int type = track.attribute("type").toInt(&isInt);
+	switch (isInt ? static_cast<Track::Type>(type) : Track::Type::Count)
+	{
+		case Track::Type::Instrument:
+		case Track::Type::Pattern:
+		case Track::Type::Sample:
+		case Track::Type::Automation:
+			return true;
+		default:
+			*err = QString("Unsupported track type \"%1\": use 0 (instrument), 1 (pattern), 2 (sample) or 5 (automation)").arg(track.attribute("type"));
+			return false;
+	}
+}
+
+//! Track::create appends; this puts `track` at `index`. With a GUI the song editor owns the
+//! ordering (its views are created through a queued trackAdded connection), so move through it.
+static void moveTrackTo(Track* track, int index)
+{
+	if (auto g = gui::getGUI(); g && g->songEditor())
+	{
+		QCoreApplication::sendPostedEvents();
+		auto editor = g->songEditor()->m_editor;
+		for (auto view : editor->trackViews())
+		{
+			if (view->getTrack() == track)
+			{
+				editor->moveTrackView(view, index);
+				return;
+			}
+		}
+	}
+	Engine::getSong()->moveTrack(track, index);
+}
+
+//! ~Track unlinks itself from the container and closes its view; the audio engine must be paused for it.
+static void deleteTrack(Track* track)
+{
+	auto guard = Engine::audioEngine()->requestChangesGuard();
+	delete track;
+}
+
+static QJsonObject getTrackXml(const QJsonObject& a)
+{
+	QString err;
+	auto track = trackAt(a["index"].toInt(-1), &err);
+	if (!track) { return R::error(err); }
+	QDomDocument doc;
+	QDomElement root = doc.createElement("root");
+	doc.appendChild(root);
+	const QString xml = elementToString(track->saveState(doc, root));
+	if (xml.size() > MaxXmlBytes)
+	{
+		return R::error(QString("Track XML is %1 bytes (limit %2); use get_project_summary and the convenience tools instead").arg(xml.size()).arg(MaxXmlBytes));
+	}
+	return R::ok({{"index", a["index"].toInt()}, {"xml", xml}});
+}
+
+static QJsonObject addTrackXml(const QJsonObject& a)
+{
+	DataFile df(DataFile::Type::SongProject);
+	QDomElement el;
+	QString err;
+	if (!parseFragment(a["xml"].toString(), "track", df, el, &err) || !creatableTrackType(el, &err)) { return R::error(err); }
+	// Track::create takes the audio-engine change lock itself; do not guard it.
+	if (!Track::create(el, Engine::getSong())) { return R::error("Track could not be created from XML"); }
+	return R::ok({{"index", int(Engine::getSong()->tracks().size()) - 1}});
+}
+
+static QJsonObject replaceTrackXml(const QJsonObject& a)
+{
+	QString err;
+	const int index = a["index"].toInt(-1);
+	auto old = trackAt(index, &err);
+	if (!old) { return R::error(err); }
+	DataFile df(DataFile::Type::SongProject);
+	QDomElement el;
+	if (!parseFragment(a["xml"].toString(), "track", df, el, &err) || !creatableTrackType(el, &err)) { return R::error(err); }
+	auto track = Track::create(el, Engine::getSong());
+	if (!track) { return R::error("Track could not be created from XML"); }
+	moveTrackTo(track, index);
+	deleteTrack(old);
+	return R::ok({{"index", index}});
+}
+
+static QJsonObject removeTrack(const QJsonObject& a)
+{
+	QString err;
+	auto track = trackAt(a["index"].toInt(-1), &err);
+	if (!track) { return R::error(err); }
+	deleteTrack(track);
+	return R::ok({{"trackCount", int(Engine::getSong()->tracks().size())}});
+}
+
+static QJsonObject getMixerXml(const QJsonObject&)
+{
+	QDomDocument doc;
+	QDomElement root = doc.createElement("root");
+	doc.appendChild(root);
+	const QString xml = elementToString(Engine::mixer()->saveState(doc, root));
+	if (xml.size() > MaxXmlBytes)
+	{
+		return R::error(QString("Mixer XML is %1 bytes (limit %2)").arg(xml.size()).arg(MaxXmlBytes));
+	}
+	return R::ok({{"xml", xml}});
+}
+
+//! Mixer channel of every instrument/sample track in the song and pattern store.
+static std::vector<std::pair<IntModel*, int>> trackMixerChannels()
+{
+	std::vector<std::pair<IntModel*, int>> out;
+	for (auto container : {static_cast<TrackContainer*>(Engine::getSong()), static_cast<TrackContainer*>(Engine::patternStore())})
+	{
+		for (auto t : container->tracks())
+		{
+			IntModel* m = nullptr;
+			if (auto it = dynamic_cast<InstrumentTrack*>(t)) { m = it->mixerChannelModel(); }
+			else if (auto st = dynamic_cast<SampleTrack*>(t)) { m = st->mixerChannelModel(); }
+			if (m) { out.emplace_back(m, m->value()); }
+		}
+	}
+	return out;
+}
+
+static QJsonObject setMixerXml(const QJsonObject& a)
+{
+	DataFile df(DataFile::Type::SongProject);
+	QDomElement el;
+	QString err;
+	if (!parseFragment(a["xml"].toString(), "mixer", df, el, &err)) { return R::error(err); }
+	auto mixer = Engine::mixer();
+	// Mixer::loadSettings starts by deleting every channel, which re-routes tracks to master;
+	// remember the routing and put it back afterwards (same order as Song::loadProject).
+	const auto routing = trackMixerChannels();
+	auto g = gui::getGUI();
+	if (g && g->mixerView()) { g->mixerView()->clear(); }
+	{
+		auto guard = Engine::audioEngine()->requestChangesGuard();
+		mixer->restoreState(el);
+		const int last = mixer->numChannels() - 1;
+		for (auto [model, channel] : routing)
+		{
+			model->setRange(0, last);
+			model->setValue(channel <= last ? channel : 0);
+		}
+	}
+	if (g && g->mixerView()) { g->mixerView()->refreshDisplay(); }
+	return R::ok({{"channels", int(mixer->numChannels())}});
+}
+
 void registerAiProjectTools(AiToolRegistry& r)
 {
 	r.add({"get_project_summary", "Compact overview of the open project: tempo, time signature, tracks, clips. Call this first.", schema({}), projectSummary});
@@ -195,6 +404,16 @@ void registerAiProjectTools(AiToolRegistry& r)
 			{"notes", QJsonObject{{"type", "array"}, {"items", schema({{"pos", prop("integer", "ticks from clip start")}, {"len", prop("integer", "ticks")},
 				{"key", prop("integer", "0..127")}, {"vol", prop("integer", "0..200, default 100")}, {"pan", prop("integer", "-100..100")}}, {"pos", "len", "key"})}}},
 			{"clear", prop("boolean", "remove existing notes first")}}, {"track", "clipPos", "notes"}), addNotes});
+	r.add({"get_track_xml", "Full <track> XML for one track (instrument settings, effects, clips, notes). Same format as .mmp files.",
+		schema({{"index", prop("integer", "track index")}}, {"index"}), getTrackXml});
+	r.add({"add_track", "Append a track from <track> XML (as returned by get_track_xml or built from a preset). Returns its index.",
+		schema({{"xml", prop("string", "<track type=\"0\" name=\"...\">...</track>")}}, {"xml"}), addTrackXml});
+	r.add({"replace_track", "Replace the track at index with new <track> XML, keeping its position.",
+		schema({{"index", prop("integer", "track index")}, {"xml", prop("string", "<track ...>...</track>")}}, {"index", "xml"}), replaceTrackXml});
+	r.add({"remove_track", "Delete a track. Returns the remaining track count.", schema({{"index", prop("integer", "track index")}}, {"index"}), removeTrack});
+	r.add({"get_mixer_xml", "Mixer channels, names, volumes, sends and channel effect chains as <mixer> XML.", schema({}), getMixerXml});
+	r.add({"set_mixer_xml", "Replace the whole mixer from <mixer> XML (as returned by get_mixer_xml). Track routing is preserved.",
+		schema({{"xml", prop("string", "<mixer>...</mixer>")}}, {"xml"}), setMixerXml});
 }
 
 } // namespace lmms
