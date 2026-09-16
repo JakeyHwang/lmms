@@ -1766,7 +1766,7 @@ void registerAiDiscoveryTools(AiToolRegistry& r, AiPathPolicy& policy)
 - Modify: CMake lists
 - Test: covered by Task 13 smoke (render/play need audio engine + event loop); unit-test `new_project` and `save` path rejection in `AiProjectToolsTest` by registering action tools with a policy whose roots are a `QTemporaryDir`.
 
-- [ ] **Step 1: Failing test (append to AiProjectToolsTest; add members `lmms::AiPathPolicy policy; QTemporaryDir tmp;` and in `initTestCase`: `policy.setRoots({tmp.path()}); lmms::registerAiActionTools(reg, policy);`)**
+- [x] **Step 1: Failing test (append to AiProjectToolsTest; add members `lmms::AiPathPolicy policy; QTemporaryDir tmp;` and in `initTestCase`: `policy.setRoots({tmp.path()}); lmms::registerAiActionTools(reg, policy);`)**
 
 ```cpp
 	void saveRespectsPolicyAndWrites()
@@ -1783,9 +1783,9 @@ void registerAiDiscoveryTools(AiToolRegistry& r, AiPathPolicy& policy)
 ```
 (The last line documents that `new_project` loads the default template, which may contain tracks; assert instead that `projectFileName()` is empty.)
 
-- [ ] **Step 2: Verify failure.**
+- [x] **Step 2: Verify failure.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```cpp
 #include "AiTools.h"
@@ -1855,9 +1855,9 @@ void registerAiActionTools(AiToolRegistry& r, AiPathPolicy& policy)
 ```
 Note: during a turn `AiSession` sets journalling off, so `undo` inside a turn only sees pre-turn history — acceptable; the prompt tells the model to prefer `remove_track`/`replace_track` for its own corrections. `Engine::audioEngine()->outputSampleRate()` — confirm name in `include/AudioEngine.h` (`outputSampleRate()` or `processingSampleRate()`).
 
-- [ ] **Step 4: Run** — `AiProjectToolsTest.exe` passes.
+- [x] **Step 4: Run** — `AiProjectToolsTest.exe` passes.
 
-- [ ] **Step 5: Commit** — `git commit -m "ai: play/stop/render/save/new_project/undo tools"`.
+- [x] **Step 5: Commit** — `git commit -m "ai: play/stop/render/save/new_project/undo tools"`.
 
 ---
 
@@ -2014,7 +2014,7 @@ Includes: `"AiConfig.h"`, `"OpenAiClient.h"`, `<QFormLayout>`, `<QCheckBox>`.
 - Modify: `src/gui/CMakeLists.txt`, `include/GuiApplication.h`, `src/gui/GuiApplication.cpp`, `include/MainWindow.h`, `src/gui/MainWindow.cpp`
 - Test: manual + Task 13 smoke.
 
-- [ ] **Step 1: AiChatView**
+- [x] **Step 1: AiChatView**
 
 ```cpp
 // include/AiChatView.h
@@ -2173,15 +2173,15 @@ void AiChatView::appendBlock(const QString& html) { m_transcript->append(html); 
 ```
 Add `gui/ai/AiChatView.cpp` to `src/gui/CMakeLists.txt`.
 
-- [ ] **Step 2: GuiApplication + MainWindow wiring**
+- [x] **Step 2: GuiApplication + MainWindow wiring**
 
 - `include/GuiApplication.h`: forward-declare `class AiChatView;`, add `AiChatView* aiChatView() { return m_aiChatView; }` and member `AiChatView* m_aiChatView;`; in `GuiApplication.cpp` after the controller rack block: `displayInitProgress(tr("Preparing AI composer")); m_aiChatView = new AiChatView; connect(m_aiChatView, SIGNAL(destroyed(QObject*)), this, SLOT(childDestroyed(QObject*)));` and a `childDestroyed` branch nulling it.
 - `MainWindow`: slot `void toggleAiChatWin()` → `toggleWindow(getGUI()->aiChatView());`. In `updateViewMenu()` after Project Notes: `m_viewMenu->addAction(embed::getIconPixmap("project_notes"), tr("AI Composer") + "\tCtrl+Shift+A", this, SLOT(toggleAiChatWin()));`. Toolbar: after `project_notes_window`: `auto ai_window = new ToolButton(embed::getIconPixmap("project_notes"), tr("Show/hide AI Composer") + " (Ctrl+Shift+A)", this, SLOT(toggleAiChatWin()), m_toolBar); ai_window->setShortcut(keySequence(Qt::CTRL, Qt::SHIFT, Qt::Key_A)); m_toolBarLayout->addWidget(ai_window, 1, 8);`.
 - After the Settings dialog closes with OK (find where `SetupDialog` is exec'd in `MainWindow.cpp`, slot named like `showSettingsDialog`), call `getGUI()->aiChatView()->reloadConfig();`. Ensure that slot is public so the banner link can call it.
 
-- [ ] **Step 3: Build, launch, verify** — Ctrl+Shift+A shows the panel; with no key, the banner appears and its link opens Settings; after entering a bogus key + model, the chat box appears.
+- [x] **Step 3: Build, launch, verify** — Ctrl+Shift+A shows the panel; with no key, the banner appears and its link opens Settings; after entering a bogus key + model, the chat box appears.
 
-- [ ] **Step 4: Commit** — `git commit -m "ai: chat panel wired into main window"`.
+- [x] **Step 4: Commit** — `git commit -m "ai: chat panel wired into main window"`.
 
 ---
 
@@ -2269,7 +2269,7 @@ if __name__ == "__main__":
     HTTPServer(("127.0.0.1", 8765), H).serve_forever()
 ```
 
-- [ ] **Step 2: Run end to end**
+- [x] **Step 2: Run end to end**
 
 1. `python tests/scripted/ai_mock_server.py` (MSYS2 has python via `pacman -S python` if missing; Windows python also fine).
 2. Launch `build/lmms.exe`, Settings → AI: base URL `http://127.0.0.1:8765/v1`, key `x`, model `mock`. Test connection → ✓.
@@ -2279,12 +2279,12 @@ if __name__ == "__main__":
 6. Type "render it to C:/git_repos/lmms/build/loop.wav" → since the path is in the user's text it is allowed; a WAV appears.
 7. Screenshot the panel with the transcript for the report.
 
-- [ ] **Step 3: Regression**
+- [x] **Step 3: Regression**
 
 Run: `cd build/tests && ctest --output-on-failure` → all tests pass (8 original + 5 new).
 Run: `build/lmms.exe render tests/emptyproject.mmp -o build/empty.wav` → completes.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/scripted/ai_mock_server.py

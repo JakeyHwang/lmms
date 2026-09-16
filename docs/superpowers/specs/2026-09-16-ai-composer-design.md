@@ -92,8 +92,11 @@ Args and results are JSON. XML is passed as strings. Every result is
 
 | Tool | Args | Behaviour |
 |---|---|---|
-| `add_instrument_track` | `name, instrument, preset?, mixerChannel?` | `Track::create` + `InstrumentTrack::loadInstrument`, or `replaceInstrument(DataFile(preset))`. Returns index. |
-| `add_notes` | `track, clipPos, notes:[{pos, len, key, vol?, pan?}], clear?` | Ticks (192/bar in 4/4). Creates the clip at `clipPos` if none exists. `MidiClip::addNote(n, false)`. |
+| `add_instrument_track` | `name, instrument, mixerChannel?` | `Track::create` + `InstrumentTrack::loadInstrument`; preset sounds go through `add_track` + `get_preset_xml`. Returns index. |
+| `add_notes` | `track, clipPos, len?, name?, notes:[{pos, len, key, vol?, pan?}], clear?` | Ticks (192/bar in 4/4). Creates the clip at `clipPos` if none exists; `len` fixes a manually sized clip, otherwise it grows to whole bars. `clear` replaces the clip's notes. |
+| `add_clips` | `track, clips:[{clipPos, len?, name?, notes, clear?}]` | Several `add_notes` in one call for sectioned material (intro/verse/outro). All clips validated before any is written. |
+| `remove_clip` | `track, clipPos` | Deletes the clip starting exactly at `clipPos` (MIDI, sample or automation). |
+| `set_track` | `index, name?, volume?, pan?, muted?, solo?, mixerChannel?` | Quick mix: one call instead of `describe_model_tree` + `set_params`. |
 | `add_effect` | `track` or `mixerChannel`, `effect, params?:{name: value}` | `Effect::instantiate` + `EffectChain::appendEffect`; params set by `AutomatableModel` display name. |
 | `set_params` | `track, target: "instrument" \| "effect:N" \| "track", params:{}` | Walks the model tree by display name. |
 | `add_automation` | `track, target, model, points:[{pos, value}], progression?` | `AutomationClip::addObject` + `putValue(t, v, false)`. |
@@ -147,10 +150,11 @@ accepts).
   and effect names, `.mmp` XML cheat-sheet (head, track, instrumenttrack,
   midiclip/note, automationclip, sampleclip, fxchain), tick units, the
   "call `get_project_summary` first" rule.
-- Turn: `ProjectJournal::addJournalCheckPoint()` → send → while the reply
-  has tool calls: dispatch sequentially, append `{role:"tool", tool_call_id,
+- Turn: snapshot the project (`Song::saveProjectData` into a `DataFile`,
+  journalling disabled for the duration) → send → while the reply has tool
+  calls: dispatch sequentially, append `{role:"tool", tool_call_id,
   content}` for each, resend → plain text ends the turn.
-- Caps: 40 tool calls per turn, or 5 consecutive tool errors → stop with a
+- Caps: 150 tool calls per turn, or 5 consecutive tool errors → stop with a
   message to the user.
 - Context guard: if the request body exceeds ~120 k characters, replace the
   oldest tool-result contents with `"[elided]"`, keeping user and assistant
