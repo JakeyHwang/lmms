@@ -24,26 +24,36 @@
 
 #include "AiTools.h"
 
+#include <functional>
 #include <utility>
 #include <vector>
 
 #include <QCoreApplication>
 #include <QDomDocument>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QTextStream>
 
 #include "AiToolHelpers.h"
+#include "AudioBusHandle.h"
 #include "AudioEngine.h"
+#include "AutomatableModel.h"
+#include "AutomationClip.h"
 #include "Clip.h"
 #include "DataFile.h"
 #include "DeprecationHelper.h"
+#include "Effect.h"
+#include "EffectChain.h"
 #include "GuiApplication.h"
+#include "Instrument.h"
 #include "MidiClip.h"
 #include "Mixer.h"
 #include "MixerView.h"
 #include "Note.h"
 #include "PatternStore.h"
 #include "PluginFactory.h"
+#include "SampleBuffer.h"
+#include "SampleClip.h"
 #include "SampleTrack.h"
 #include "SongEditor.h"
 #include "TimePos.h"
@@ -389,7 +399,266 @@ static QJsonObject setMixerXml(const QJsonObject& a)
 	return R::ok({{"channels", int(mixer->numChannels())}});
 }
 
-void registerAiProjectTools(AiToolRegistry& r)
+// --- Effects, parameters, automation, samples ---------------------------------------------
+
+//! Where a model-tree tool looks: an instrument/sample track, or a mixer channel (effects only).
+struct ModelScope
+{
+	Track* track = nullptr;
+	int mixerChannel = -1;
+	EffectChain* chain = nullptr;
+};
+
+static bool resolveScope(const QJsonObject& a, ModelScope& scope, QString* err)
+{
+	if (a.contains("mixerChannel"))
+	{
+		const int ch = a["mixerChannel"].toInt(-1);
+		if (ch < 0 || ch >= Engine::mixer()->numChannels())
+		{
+			*err = QString("mixerChannel must be 0..%1").arg(Engine::mixer()->numChannels() - 1);
+			return false;
+		}
+		scope.mixerChannel = ch;
+		scope.chain = &Engine::mixer()->mixerChannel(ch)->m_fxChain;
+		return true;
+	}
+	if (!a.contains("track")) { *err = "Give either track or mixerChannel"; return false; }
+	scope.track = trackAt(a["track"].toInt(-1), err);
+	if (!scope.track) { return false; }
+	if (auto it = dynamic_cast<InstrumentTrack*>(scope.track)) { scope.chain = it->audioBusHandle()->effects(); }
+	else if (auto st = dynamic_cast<SampleTrack*>(scope.track)) { scope.chain = st->audioBusHandle()->effects(); }
+	if (!scope.chain) { *err = QString("Track %1 is not an instrument or sample track").arg(a["track"].toInt()); return false; }
+	return true;
+}
+
+//! Resolves `target` ("track" | "instrument" | "effect:N") to the model whose parameters are meant.
+static Model* resolveTarget(const ModelScope& scope, const QString& target, QString* err)
+{
+	if (target.startsWith("effect:"))
+	{
+		bool isInt = false;
+		const int n = target.mid(7).toInt(&isInt);
+		const auto& fx = scope.chain->effects();
+		if (!isInt || n < 0 || n >= int(fx.size()))
+		{
+			*err = QString("No effect %1 (chain has %2)").arg(target.mid(7)).arg(fx.size());
+			return nullptr;
+		}
+		return fx[n];
+	}
+	if (!scope.track) { *err = "On a mixer channel the target must be effect:N"; return nullptr; }
+	if (target == "track") { return scope.track; }
+	if (target == "instrument")
+	{
+		auto it = dynamic_cast<InstrumentTrack*>(scope.track);
+		if (!it || !it->instrument()) { *err = "Track has no instrument loaded"; return nullptr; }
+		return it->instrument();
+	}
+	*err = "target must be 'track', 'instrument' or 'effect:N'";
+	return nullptr;
+}
+
+//! Automatable models under `root`. A track lists only its own (volume, panning, pitch, ...):
+//! its instrument is a child too but is a separate target. Plugins are searched recursively
+//! because their parameters usually sit in a controls sub-model.
+static QList<AutomatableModel*> modelsOf(Model* root)
+{
+	return root->findChildren<AutomatableModel*>(dynamic_cast<Track*>(root) ? Qt::FindDirectChildrenOnly : Qt::FindChildrenRecursively);
+}
+
+//! Model called `name` under `root`: displayName match first (case-insensitive), then a
+//! "Parent>Name" suffix of fullDisplayName so nested parameters can be disambiguated.
+static AutomatableModel* findModel(Model* root, const QString& name)
+{
+	if (name.isEmpty()) { return nullptr; }
+	const auto models = modelsOf(root);
+	for (auto m : models)
+	{
+		if (m->displayName().compare(name, Qt::CaseInsensitive) == 0) { return m; }
+	}
+	for (auto m : models)
+	{
+		if (m->fullDisplayName().endsWith(">" + name, Qt::CaseInsensitive)) { return m; }
+	}
+	return nullptr;
+}
+
+static QJsonArray describeModels(Model* root)
+{
+	QJsonArray out;
+	if (!root) { return out; }
+	for (auto m : modelsOf(root))
+	{
+		if (m->displayName().isEmpty()) { continue; }
+		out.append(QJsonObject{{"name", m->displayName()}, {"value", double(m->value<float>())},
+			{"min", double(m->minValue<float>())}, {"max", double(m->maxValue<float>())}});
+	}
+	return out;
+}
+
+//! Sets each `params` entry on the model of that name under `root`. Every name is resolved
+//! before anything is written, so an unknown one leaves the project untouched. On success
+//! `applied` holds the values as the models clamped them.
+static bool applyParams(Model* root, const QJsonObject& params, QJsonObject& applied, QString* err)
+{
+	if (params.isEmpty()) { *err = "params must be a non-empty object of name: value"; return false; }
+	struct Edit { QString name; AutomatableModel* model; float value; };
+	std::vector<Edit> pending;
+	for (auto it = params.begin(); it != params.end(); ++it)
+	{
+		auto m = findModel(root, it.key());
+		if (!m) { *err = "Unknown parameter '" + it.key() + "' (use describe_model_tree)"; return false; }
+		if (it.value().isBool()) { pending.push_back({it.key(), m, it.value().toBool() ? 1.f : 0.f}); }
+		else if (it.value().isDouble()) { pending.push_back({it.key(), m, float(it.value().toDouble())}); }
+		else { *err = "Parameter '" + it.key() + "' must be a number"; return false; }
+	}
+	{
+		// Raw model edits while the engine may be reading them.
+		auto guard = Engine::audioEngine()->requestChangesGuard();
+		for (auto& e : pending) { e.model->setValue(e.value); }
+	}
+	for (auto& e : pending) { applied[e.name] = double(e.model->value<float>()); }
+	return true;
+}
+
+static QJsonObject addEffect(const QJsonObject& a)
+{
+	ModelScope scope;
+	QString err;
+	if (!resolveScope(a, scope, &err)) { return R::error(err); }
+	const QString plugin = a["effect"].toString();
+	const auto info = PluginFactory::instance()->pluginInfo(plugin.toUtf8().constData());
+	if (plugin.isEmpty() || info.isNull() || info.descriptor->type != Plugin::Type::Effect)
+	{
+		return R::error("Unknown effect plugin: " + plugin + " (use list_effects)");
+	}
+	// LADSPA/VST/LV2 hosts need a sub-plugin key; only self-contained effects can be added by name.
+	if (info.descriptor->subPluginFeatures) { return R::error(plugin + " hosts sub-plugins and cannot be added by name"); }
+	auto effect = Effect::instantiate(plugin, scope.chain, nullptr);
+	if (!effect) { return R::error("Failed to instantiate effect " + plugin); }
+	// Parameters are applied before the effect is in the chain, so a bad name leaves the chain as it was.
+	QJsonObject applied;
+	if (a.contains("params") && !applyParams(effect, a["params"].toObject(), applied, &err))
+	{
+		delete effect;
+		return R::error(err);
+	}
+	// appendEffect takes the audio-engine change lock itself; do not guard it.
+	scope.chain->appendEffect(effect);
+	return R::ok({{"effectIndex", int(scope.chain->effects().size()) - 1}, {"params", applied}});
+}
+
+static QJsonObject setParams(const QJsonObject& a)
+{
+	ModelScope scope;
+	QString err;
+	if (!resolveScope(a, scope, &err)) { return R::error(err); }
+	auto root = resolveTarget(scope, a["target"].toString("track"), &err);
+	if (!root) { return R::error(err); }
+	QJsonObject applied;
+	if (!applyParams(root, a["params"].toObject(), applied, &err)) { return R::error(err); }
+	return R::ok({{"applied", applied}});
+}
+
+static QJsonObject describeModelTree(const QJsonObject& a)
+{
+	ModelScope scope;
+	QString err;
+	if (!resolveScope(a, scope, &err)) { return R::error(err); }
+	QJsonArray effects;
+	int i = 0;
+	for (auto fx : scope.chain->effects())
+	{
+		effects.append(QJsonObject{{"target", QString("effect:%1").arg(i++)}, {"name", fx->displayName()}, {"params", describeModels(fx)}});
+	}
+	QJsonObject out{{"effects", effects}};
+	if (scope.track)
+	{
+		out["track"] = describeModels(scope.track);
+		auto it = dynamic_cast<InstrumentTrack*>(scope.track);
+		out["instrument"] = describeModels(it ? it->instrument() : nullptr);
+	}
+	return R::ok(out);
+}
+
+static QJsonObject addAutomation(const QJsonObject& a)
+{
+	ModelScope scope;
+	QString err;
+	if (!resolveScope(a, scope, &err)) { return R::error(err); }
+	auto root = resolveTarget(scope, a["target"].toString("track"), &err);
+	if (!root) { return R::error(err); }
+	auto model = findModel(root, a["model"].toString());
+	if (!model) { return R::error("Unknown model '" + a["model"].toString() + "' (use describe_model_tree)"); }
+	const auto points = a["points"].toArray();
+	if (points.isEmpty()) { return R::error("points must be a non-empty array of {pos, value}"); }
+	for (auto v : points)
+	{
+		auto p = v.toObject();
+		if (!p["pos"].isDouble() || p["pos"].toInt() < 0 || !p["value"].isDouble())
+		{
+			return R::error("each point needs pos >= 0 (ticks) and a numeric value");
+		}
+	}
+	const QString prog = a["progression"].toString("linear");
+	AutomationClip::ProgressionType type;
+	if (prog == "discrete") { type = AutomationClip::ProgressionType::Discrete; }
+	else if (prog == "linear") { type = AutomationClip::ProgressionType::Linear; }
+	else if (prog == "cubic") { type = AutomationClip::ProgressionType::CubicHermite; }
+	else { return R::error("progression must be discrete, linear or cubic"); }
+	// Track::create and createClip (Clip::movePosition) take the audio-engine change lock themselves.
+	auto atrack = Track::create(Track::Type::Automation, Engine::getSong());
+	if (!atrack) { return R::error("Could not create automation track"); }
+	atrack->setName((scope.track ? scope.track->name() : QString("Mixer %1").arg(scope.mixerChannel)) + " / " + model->displayName());
+	auto clip = dynamic_cast<AutomationClip*>(atrack->createClip(TimePos(0)));
+	if (!clip) { return R::error("Could not create automation clip"); }
+	// The clip serialises node edits with its own mutex, like the automation editor does.
+	clip->setProgressionType(type);
+	clip->addObject(model);
+	for (auto v : points)
+	{
+		auto p = v.toObject();
+		// Unquantised, and keep neighbouring nodes: every given point must survive verbatim.
+		clip->putValue(TimePos(p["pos"].toInt()), float(p["value"].toDouble()), false, true);
+	}
+	return R::ok({{"automationTrack", int(Engine::getSong()->tracks().size()) - 1}, {"model", model->displayName()}, {"points", points.size()}});
+}
+
+static QJsonObject addSampleClip(const QJsonObject& a, const std::function<bool(const QString&)>& pathAllowed)
+{
+	const QString file = a["file"].toString();
+	if (pathAllowed && !pathAllowed(file)) { return R::error("Path not allowed: " + file); }
+	if (file.isEmpty() || !QFileInfo(file).isFile()) { return R::error("File not found: " + file); }
+	const int pos = a["pos"].toInt(0);
+	if (pos < 0) { return R::error("pos must be >= 0 ticks"); }
+	// Decode before touching the project, so an unreadable file changes nothing.
+	auto buffer = SampleBuffer::fromFile(file);
+	if (buffer->empty()) { return R::error("Could not decode audio file: " + file); }
+	SampleTrack* track = nullptr;
+	QString err;
+	if (a.contains("track"))
+	{
+		track = dynamic_cast<SampleTrack*>(trackAt(a["track"].toInt(-1), &err));
+		if (!track) { return R::error(err.isEmpty() ? QString("Track %1 is not a sample track").arg(a["track"].toInt()) : err); }
+	}
+	else
+	{
+		// Track::create takes the audio-engine change lock itself; do not guard it.
+		track = dynamic_cast<SampleTrack*>(Track::create(Track::Type::Sample, Engine::getSong()));
+		if (!track) { return R::error("Could not create sample track"); }
+		track->setName(QFileInfo(file).completeBaseName());
+	}
+	// createClip -> Clip::movePosition and setSampleBuffer take the change lock themselves.
+	auto clip = dynamic_cast<SampleClip*>(track->createClip(TimePos(pos)));
+	if (!clip) { return R::error("Could not create sample clip"); }
+	clip->setSampleBuffer(std::move(buffer));
+	const auto& tracks = Engine::getSong()->tracks();
+	const int index = int(std::find(tracks.begin(), tracks.end(), track) - tracks.begin());
+	return R::ok({{"track", index}, {"pos", pos}, {"len", clip->length().getTicks()}});
+}
+
+void registerAiProjectTools(AiToolRegistry& r, std::function<bool(const QString&)> pathAllowed)
 {
 	r.add({"get_project_summary", "Compact overview of the open project: tempo, time signature, tracks, clips. Call this first.", schema({}), projectSummary});
 	r.add({"get_head", "Tempo, time signature, master volume/pitch.", schema({}), getHead});
@@ -414,6 +683,22 @@ void registerAiProjectTools(AiToolRegistry& r)
 	r.add({"get_mixer_xml", "Mixer channels, names, volumes, sends and channel effect chains as <mixer> XML.", schema({}), getMixerXml});
 	r.add({"set_mixer_xml", "Replace the whole mixer from <mixer> XML (as returned by get_mixer_xml). Track routing is preserved.",
 		schema({{"xml", prop("string", "<mixer>...</mixer>")}}, {"xml"}), setMixerXml});
+	r.add({"add_effect", "Add an effect plugin (see list_effects) to an instrument/sample track's chain or a mixer channel's chain. Optional params are applied as with set_params.",
+		schema({{"track", prop("integer", "track index (or give mixerChannel)")}, {"mixerChannel", prop("integer", "mixer channel index")},
+			{"effect", prop("string", "plugin name, e.g. amplifier, reverbsc, eq")}, {"params", prop("object", "{name: value} as listed by describe_model_tree")}}, {"effect"}), addEffect});
+	r.add({"set_params", "Set parameters by name on a track (volume, panning, pitch...), its instrument, or one of its effects. Names are case-insensitive; describe_model_tree lists them with ranges.",
+		schema({{"track", prop("integer", "track index (or give mixerChannel)")}, {"mixerChannel", prop("integer", "mixer channel index (target must be effect:N)")},
+			{"target", prop("string", "track | instrument | effect:N")}, {"params", prop("object", "{name: value}")}}, {"target", "params"}), setParams});
+	r.add({"describe_model_tree", "List automatable parameters (name, value, min, max) of a track, its instrument and each effect. Call before set_params or add_automation.",
+		schema({{"track", prop("integer", "track index (or give mixerChannel)")}, {"mixerChannel", prop("integer", "mixer channel index")}}), describeModelTree});
+	r.add({"add_automation", "Create an automation track with one clip driving a parameter through the given points. Ticks: 192 per bar in 4/4.",
+		schema({{"track", prop("integer", "track index (or give mixerChannel)")}, {"mixerChannel", prop("integer", "mixer channel index (target must be effect:N)")},
+			{"target", prop("string", "track | instrument | effect:N")}, {"model", prop("string", "parameter name from describe_model_tree")},
+			{"points", QJsonObject{{"type", "array"}, {"items", schema({{"pos", prop("integer", "ticks")}, {"value", prop("number", "parameter value")}}, {"pos", "value"})}}},
+			{"progression", prop("string", "discrete | linear (default) | cubic")}}, {"target", "model", "points"}), addAutomation});
+	r.add({"add_sample_clip", "Place an audio file as a clip on a sample track (a new one named after the file unless track is given). Returns the track index and clip length in ticks.",
+		schema({{"file", prop("string", "path to a wav/ogg/flac/aiff file")}, {"pos", prop("integer", "clip start in ticks")}, {"track", prop("integer", "existing sample track index")}}, {"file", "pos"}),
+		[pathAllowed = std::move(pathAllowed)](const QJsonObject& a) { return addSampleClip(a, pathAllowed); }});
 }
 
 } // namespace lmms

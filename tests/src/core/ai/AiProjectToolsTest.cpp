@@ -23,15 +23,21 @@
  */
 
 #include <QtTest>
+#include <QDataStream>
+#include <QFile>
 #include <QJsonArray>
+#include <QTemporaryDir>
 
 #include "AiToolRegistry.h"
 #include "AiTools.h"
+#include "AutomationClip.h"
 #include "Engine.h"
 #include "InstrumentTrack.h"
 #include "MidiClip.h"
 #include "Mixer.h"
 #include "PluginFactory.h"
+#include "SampleClip.h"
+#include "SampleTrack.h"
 #include "Song.h"
 #include "Track.h"
 
@@ -40,11 +46,32 @@ class AiProjectToolsTest : public QObject
 	Q_OBJECT
 	lmms::AiToolRegistry reg;
 
-	//! Instrument plugins live in DLLs that import from lmms.exe, so they cannot be loaded into a
-	//! test process on Windows; elsewhere they need LMMS_PLUGIN_DIR to point at the plugin dir.
-	static bool hasTripleOscillator()
+	//! Plugins live in DLLs that import from lmms.exe, so they cannot be loaded into a test
+	//! process on Windows; elsewhere they need LMMS_PLUGIN_DIR to point at the plugin dir.
+	static bool hasPlugin(const char* name)
 	{
-		return !lmms::PluginFactory::instance()->pluginInfo("tripleoscillator").isNull();
+		return !lmms::PluginFactory::instance()->pluginInfo(name).isNull();
+	}
+	static bool hasTripleOscillator() { return hasPlugin("tripleoscillator"); }
+	//! One second of 16-bit mono PCM at 44100 Hz, written to `dir`; returns the path.
+	static QString writeTestWav(const QTemporaryDir& dir)
+	{
+		const quint32 rate = 44100, frames = 44100;
+		QByteArray bytes;
+		QDataStream ds(&bytes, QIODevice::WriteOnly);
+		ds.setByteOrder(QDataStream::LittleEndian);
+		ds.writeRawData("RIFF", 4); ds << quint32(36 + frames * 2); ds.writeRawData("WAVE", 4);
+		ds.writeRawData("fmt ", 4); ds << quint32(16) << quint16(1) << quint16(1) << rate << quint32(rate * 2) << quint16(2) << quint16(16);
+		ds.writeRawData("data", 4); ds << quint32(frames * 2);
+		for (quint32 i = 0; i < frames; ++i) { ds << qint16(int(i % 100) * 300 - 15000); }
+		QFile f(dir.path() + "/beep.wav");
+		if (!f.open(QIODevice::WriteOnly) || f.write(bytes) != bytes.size()) { return {}; }
+		return f.fileName();
+	}
+	static QJsonObject modelNamed(const QJsonArray& models, const QString& name)
+	{
+		for (auto v : models) { if (v.toObject()["name"].toString() == name) { return v.toObject(); } }
+		return {};
 	}
 	//! Instrument track with no plugin loaded: enough for note/clip tools.
 	static int addBareInstrumentTrack()
@@ -243,6 +270,164 @@ private slots:
 		QVERIFY(!reg.call("set_mixer_xml", {{"xml", "<mixer><mixerchannel num=\"1\" name=\"x\" foo=\"local:evil.dll\"/></mixer>"}})["ok"].toBool());
 		QCOMPARE(int(mixer->numChannels()), 2);
 		QCOMPARE(mixer->mixerChannel(1)->m_name, QString("Bus"));
+	}
+
+	// --- Task 7: effects, params, automation, samples ---
+	// Effect plugins cannot load here either (see hasPlugin), so the track-level model tree,
+	// parameter setting, automation and sample clips are asserted for real; loading an effect
+	// is only exercised where the plugin is available.
+	void describeAndSetTrackParams()
+	{
+		int idx = addBareInstrumentTrack();
+		auto d = reg.call("describe_model_tree", {{"track", idx}});
+		QVERIFY2(d["ok"].toBool(), qPrintable(d["error"].toString()));
+		QVERIFY(d["instrument"].toArray().isEmpty());
+		QVERIFY(d["effects"].toArray().isEmpty());
+		auto vol = modelNamed(d["track"].toArray(), "Volume");
+		QCOMPARE(vol["value"].toDouble(), 100.0);
+		QCOMPARE(vol["min"].toDouble(), 0.0);
+		QCOMPARE(vol["max"].toDouble(), 200.0);
+		QVERIFY(!modelNamed(d["track"].toArray(), "Panning").isEmpty());
+
+		auto p = reg.call("set_params", {{"track", idx}, {"target", "track"}, {"params", QJsonObject{{"volume", 42}, {"Panning", -30}}}});
+		QVERIFY2(p["ok"].toBool(), qPrintable(p["error"].toString()));
+		QCOMPARE(p["applied"].toObject()["volume"].toDouble(), 42.0);
+		auto t = dynamic_cast<lmms::InstrumentTrack*>(lmms::Engine::getSong()->tracks()[idx]);
+		QVERIFY(t);
+		QCOMPARE(int(t->volumeModel()->value()), 42);
+		QCOMPARE(int(t->panningModel()->value()), -30);
+		// Values are clamped to the model's range.
+		QVERIFY(reg.call("set_params", {{"track", idx}, {"target", "track"}, {"params", QJsonObject{{"Volume", 999}}}})["ok"].toBool());
+		QCOMPARE(int(t->volumeModel()->value()), 200);
+
+		// An unknown name rejects the whole call: nothing is applied.
+		QVERIFY(!reg.call("set_params", {{"track", idx}, {"target", "track"}, {"params", QJsonObject{{"Volume", 7}, {"NoSuchParam", 1}}}})["ok"].toBool());
+		QCOMPARE(int(t->volumeModel()->value()), 200);
+		QVERIFY(!reg.call("set_params", {{"track", idx}, {"target", "bogus"}, {"params", QJsonObject{{"Volume", 7}}}})["ok"].toBool());
+		QVERIFY(!reg.call("set_params", {{"track", idx}, {"target", "effect:0"}, {"params", QJsonObject{{"Volume", 7}}}})["ok"].toBool());
+		QVERIFY(!reg.call("set_params", {{"track", idx}, {"target", "instrument"}, {"params", QJsonObject{{"Volume", 7}}}})["ok"].toBool()); // none loaded
+		QVERIFY(!reg.call("set_params", {{"track", idx}, {"target", "track"}, {"params", QJsonObject{}}})["ok"].toBool());
+		QVERIFY(!reg.call("set_params", {{"track", 99}, {"target", "track"}, {"params", QJsonObject{{"Volume", 7}}}})["ok"].toBool());
+		QVERIFY(!reg.call("describe_model_tree", {{"track", 99}})["ok"].toBool());
+		QCOMPARE(int(t->volumeModel()->value()), 200);
+	}
+	void addEffectRejectsBadInput()
+	{
+		int idx = addBareInstrumentTrack();
+		QVERIFY(!reg.call("add_effect", {{"track", idx}, {"effect", "no_such_fx"}})["ok"].toBool());
+		QVERIFY(!reg.call("add_effect", {{"track", 99}, {"effect", "amplifier"}})["ok"].toBool());
+		QVERIFY(!reg.call("add_effect", {{"mixerChannel", 42}, {"effect", "amplifier"}})["ok"].toBool());
+		QVERIFY(!reg.call("add_effect", {{"effect", "amplifier"}})["ok"].toBool()); // neither track nor mixerChannel
+		QVERIFY(reg.call("describe_model_tree", {{"track", idx}})["effects"].toArray().isEmpty());
+	}
+	void addEffectAndParams()
+	{
+		if (!hasPlugin("amplifier")) { QSKIP("amplifier effect plugin not loadable in this test process"); }
+		int idx = addBareInstrumentTrack();
+		auto e = reg.call("add_effect", {{"track", idx}, {"effect", "amplifier"}, {"params", QJsonObject{{"Volume", 50}}}});
+		QVERIFY2(e["ok"].toBool(), qPrintable(e["error"].toString()));
+		QCOMPARE(e["effectIndex"].toInt(), 0);
+		QCOMPARE(e["params"].toObject()["Volume"].toDouble(), 50.0);
+		auto d = reg.call("describe_model_tree", {{"track", idx}});
+		QVERIFY2(d["ok"].toBool(), qPrintable(d["error"].toString()));
+		QCOMPARE(d["effects"].toArray().size(), 1);
+		auto fx = d["effects"].toArray()[0].toObject();
+		QCOMPARE(fx["target"].toString(), QString("effect:0"));
+		QCOMPARE(modelNamed(fx["params"].toArray(), "Volume")["value"].toDouble(), 50.0);
+		auto p = reg.call("set_params", {{"track", idx}, {"target", "effect:0"}, {"params", QJsonObject{{"Volume", 75}}}});
+		QVERIFY2(p["ok"].toBool(), qPrintable(p["error"].toString()));
+		d = reg.call("describe_model_tree", {{"track", idx}});
+		QCOMPARE(modelNamed(d["effects"].toArray()[0].toObject()["params"].toArray(), "Volume")["value"].toDouble(), 75.0);
+		QVERIFY(!reg.call("add_effect", {{"track", idx}, {"effect", "amplifier"}, {"params", QJsonObject{{"Nope", 1}}}})["ok"].toBool());
+		QCOMPARE(reg.call("describe_model_tree", {{"track", idx}})["effects"].toArray().size(), 1); // rejected params add nothing
+
+		auto m = reg.call("add_effect", {{"mixerChannel", 0}, {"effect", "amplifier"}});
+		QVERIFY2(m["ok"].toBool(), qPrintable(m["error"].toString()));
+		QCOMPARE(int(lmms::Engine::mixer()->mixerChannel(0)->m_fxChain.effects().size()), 1);
+		auto md = reg.call("describe_model_tree", {{"mixerChannel", 0}});
+		QVERIFY2(md["ok"].toBool(), qPrintable(md["error"].toString()));
+		QCOMPARE(md["effects"].toArray().size(), 1);
+		QVERIFY(reg.call("set_params", {{"mixerChannel", 0}, {"target", "effect:0"}, {"params", QJsonObject{{"Volume", 20}}}})["ok"].toBool());
+	}
+	void automation()
+	{
+		int idx = addBareInstrumentTrack();
+		auto t = dynamic_cast<lmms::InstrumentTrack*>(lmms::Engine::getSong()->tracks()[idx]);
+		auto points = QJsonArray{QJsonObject{{"pos", 0}, {"value", 0}}, QJsonObject{{"pos", 192}, {"value", 100}}};
+		auto r = reg.call("add_automation", {{"track", idx}, {"target", "track"}, {"model", "Volume"}, {"points", points}, {"progression", "linear"}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		int autoIdx = r["automationTrack"].toInt();
+		QCOMPARE(autoIdx, idx + 1);
+		auto at = lmms::Engine::getSong()->tracks()[autoIdx];
+		QCOMPARE(at->type(), lmms::Track::Type::Automation);
+		QCOMPARE(int(at->getClips().size()), 1);
+		auto clip = dynamic_cast<lmms::AutomationClip*>(at->getClips()[0]);
+		QVERIFY(clip);
+		QCOMPARE(clip->progressionType(), lmms::AutomationClip::ProgressionType::Linear);
+		QCOMPARE(clip->firstObject(), t->volumeModel());
+		QCOMPARE(clip->valueAt(0), 0.0f);
+		QCOMPARE(clip->valueAt(96), 50.0f);
+		QCOMPARE(clip->valueAt(192), 100.0f);
+
+		// Discrete holds the previous point; points may come in any order.
+		auto r2 = reg.call("add_automation", {{"track", idx}, {"target", "track"}, {"model", "panning"},
+			{"points", QJsonArray{QJsonObject{{"pos", 48}, {"value", 40}}, QJsonObject{{"pos", 0}, {"value", -40}}}}, {"progression", "discrete"}});
+		QVERIFY2(r2["ok"].toBool(), qPrintable(r2["error"].toString()));
+		auto clip2 = dynamic_cast<lmms::AutomationClip*>(lmms::Engine::getSong()->tracks()[r2["automationTrack"].toInt()]->getClips()[0]);
+		QVERIFY(clip2);
+		QCOMPARE(clip2->firstObject(), t->panningModel());
+		QCOMPARE(clip2->valueAt(24), -40.0f);
+		QCOMPARE(clip2->valueAt(48), 40.0f);
+
+		// Invalid input creates no automation track.
+		QVERIFY(!reg.call("add_automation", {{"track", idx}, {"target", "track"}, {"model", "NoSuchModel"}, {"points", points}})["ok"].toBool());
+		QVERIFY(!reg.call("add_automation", {{"track", idx}, {"target", "track"}, {"model", "Volume"}, {"points", QJsonArray{}}})["ok"].toBool());
+		QVERIFY(!reg.call("add_automation", {{"track", idx}, {"target", "track"}, {"model", "Volume"}, {"points", points}, {"progression", "wobbly"}})["ok"].toBool());
+		QVERIFY(!reg.call("add_automation", {{"track", idx}, {"target", "track"}, {"model", "Volume"}, {"points", QJsonArray{QJsonObject{{"pos", -5}, {"value", 1}}}}})["ok"].toBool());
+		QVERIFY(!reg.call("add_automation", {{"track", autoIdx}, {"target", "track"}, {"model", "Volume"}, {"points", points}})["ok"].toBool());
+		QCOMPARE(int(lmms::Engine::getSong()->tracks().size()), 3);
+	}
+	void sampleClip()
+	{
+		QVERIFY(!reg.call("add_sample_clip", {{"file", "C:/does/not/exist.wav"}, {"pos", 0}})["ok"].toBool());
+		QCOMPARE(int(lmms::Engine::getSong()->tracks().size()), 0);
+		QTemporaryDir dir;
+		QVERIFY(dir.isValid());
+		const QString file = writeTestWav(dir);
+		QVERIFY(!file.isEmpty());
+
+		// The optional path policy is consulted before anything is touched.
+		lmms::AiToolRegistry denied;
+		lmms::registerAiProjectTools(denied, [](const QString&) { return false; });
+		auto d = denied.call("add_sample_clip", {{"file", file}, {"pos", 0}});
+		QVERIFY(!d["ok"].toBool());
+		QVERIFY(d["error"].toString().contains("not allowed"));
+		QCOMPARE(int(lmms::Engine::getSong()->tracks().size()), 0);
+
+		auto r = reg.call("add_sample_clip", {{"file", file}, {"pos", 192}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		QCOMPARE(r["track"].toInt(), 0);
+		auto st = dynamic_cast<lmms::SampleTrack*>(lmms::Engine::getSong()->tracks()[0]);
+		QVERIFY(st);
+		QCOMPARE(st->name(), QString("beep"));
+		QCOMPARE(int(st->getClips().size()), 1);
+		auto clip = dynamic_cast<lmms::SampleClip*>(st->getClips()[0]);
+		QVERIFY(clip);
+		QCOMPARE(clip->startPosition().getTicks(), 192);
+		QVERIFY(clip->sampleFile().endsWith("beep.wav"));
+		// One second of audio at the song's tempo.
+		QCOMPARE(r["len"].toInt(), int(44100 / lmms::Engine::framesPerTick(44100)));
+		QCOMPARE(clip->length().getTicks(), r["len"].toInt());
+
+		// Existing sample track: append a clip; other track types are rejected.
+		auto r2 = reg.call("add_sample_clip", {{"file", file}, {"pos", 0}, {"track", 0}});
+		QVERIFY2(r2["ok"].toBool(), qPrintable(r2["error"].toString()));
+		QCOMPARE(int(st->getClips().size()), 2);
+		QCOMPARE(int(lmms::Engine::getSong()->tracks().size()), 1);
+		int it = addBareInstrumentTrack();
+		QVERIFY(!reg.call("add_sample_clip", {{"file", file}, {"pos", 0}, {"track", it}})["ok"].toBool());
+		QVERIFY(!reg.call("add_sample_clip", {{"file", file}, {"pos", 0}, {"track", 9}})["ok"].toBool());
+		QCOMPARE(int(st->getClips().size()), 2);
 	}
 };
 

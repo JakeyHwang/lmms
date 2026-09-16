@@ -25,6 +25,10 @@
 #ifndef LMMS_AI_TOOLS_H
 #define LMMS_AI_TOOLS_H
 
+#include <functional>
+
+#include <QString>
+
 #include "lmms_export.h"
 
 namespace lmms
@@ -32,8 +36,10 @@ namespace lmms
 
 class AiToolRegistry;
 
-//! Project tools: summary, head (tempo/time signature/master), tracks, clips, notes, automation.
-LMMS_EXPORT void registerAiProjectTools(AiToolRegistry& r);
+//! Project tools: summary, head (tempo/time signature/master), tracks, clips, notes, effects,
+//! parameters, automation, sample clips. `pathAllowed`, when set, gates every file path a tool
+//! would read (add_sample_clip); an unset callback allows everything.
+LMMS_EXPORT void registerAiProjectTools(AiToolRegistry& r, std::function<bool(const QString&)> pathAllowed = {});
 
 } // namespace lmms
 
