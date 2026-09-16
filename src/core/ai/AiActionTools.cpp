@@ -181,17 +181,27 @@ static QJsonObject newProject(const QJsonObject& a)
 
 void registerAiActionTools(AiToolRegistry& r, PathAllowed pathAllowed)
 {
-	r.add({"play", "Start song playback, optionally from a bar (default: the current position).",
-		schema({{"fromBar", prop("integer", "1-based bar to start from")}}), play});
-	r.add({"stop", "Stop playback.", schema({}), stop});
-	r.add({"render", "Render the whole song to an audio file. Blocks until the export is done; the song must be stopped.",
+	r.add({"play",
+		"WHAT: start song playback, optionally from a 1-based bar. WHEN: the user asks to hear it, or to audition a section (fromBar); not needed to verify edits, get_project_summary does that. "
+		"RETURNS {playing:true}. Gotcha: refused while rendering; call stop before render.",
+		schema({{"fromBar", prop("integer", "1-based bar to start from; default: current position")}}), play});
+	r.add({"stop",
+		"WHAT: stop playback. WHEN: before render, or when the user asks. RETURNS {playing:false}.",
+		schema({}), stop});
+	r.add({"render",
+		"WHAT: export the whole song to an audio file; blocks until done. WHEN: the user asks for a file/bounce/export. "
+		"UNITS: format wav (default), flac, ogg, mp3, else taken from the path's extension. RETURNS {path, bytes}. Gotcha: playback must be stopped and the output folder must exist.",
 		schema({{"path", prop("string", "output path, without extension or with the format's extension")},
 			{"format", prop("string", "wav (default), flac, ogg or mp3; inferred from the path's extension when omitted")}}, {"path"}),
 		[pathAllowed](const QJsonObject& a) { return render(a, pathAllowed); }});
-	r.add({"save", "Save the project as .mmp. Omit path to save to the current project file.",
+	r.add({"save",
+		"WHAT: save the project as .mmp; omit path to overwrite the current project file. WHEN: the user asks to save, or after a finished song when a path was given. "
+		"RETURNS {path}. Gotcha: an untitled project needs a path; the folder must exist.",
 		schema({{"path", prop("string", "output path; .mmp is appended when missing")}}),
 		[pathAllowed](const QJsonObject& a) { return save(a, pathAllowed); }});
-	r.add({"new_project", "Discard the current project and start a new one from the default template. Refused while the project has unsaved changes unless discardChanges is true.",
+	r.add({"new_project",
+		"WHAT: discard the current project and load the default template (one TripleOscillator, sample, pattern and automation track). WHEN: the user wants to start over; otherwise build in the open project. "
+		"RETURNS {tracks}. Gotcha: refused while there are unsaved changes unless discardChanges:true; the default tracks are empty, so remove or reuse them.",
 		schema({{"discardChanges", prop("boolean", "true to throw away unsaved changes")}}), newProject});
 }
 

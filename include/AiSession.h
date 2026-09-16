@@ -44,7 +44,7 @@ class LMMS_EXPORT AiSession : public QObject
 {
 	Q_OBJECT
 public:
-	static constexpr int MaxToolCallsPerTurn = 40;
+	static constexpr int MaxToolCallsPerTurn = 150;   // a full arrangement is ~8 tracks x 6 sections plus setup and mixing
 	static constexpr int MaxConsecutiveToolErrors = 5;
 	static constexpr int MaxRequestChars = 120000;
 

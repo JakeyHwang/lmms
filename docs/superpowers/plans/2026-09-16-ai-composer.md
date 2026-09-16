@@ -139,11 +139,11 @@ Tick units: `TimePos::ticksPerBar()` is 192 in 4/4; quarter = 48, 16th = 12.
 **Interfaces:**
 - Produces: `AiConfig` as declared above.
 
-- [ ] **Step 1: Link Qt Network**
+- [x] **Step 1: Link Qt Network**
 
 `CMakeLists.txt` line 278 → `COMPONENTS Core Gui Widgets Xml Svg Network REQUIRED`. Add `Qt${QT_VERSION_MAJOR}::Network` to the `set(QT_LIBRARIES …)` block after `::Svg`. Add `${Qt${QT_VERSION_MAJOR}Network_INCLUDE_DIRS}` to the `include_directories(SYSTEM …)` block at line 283.
 
-- [ ] **Step 2: AiConfig**
+- [x] **Step 2: AiConfig**
 
 `include/AiConfig.h`:
 ```cpp
@@ -191,12 +191,12 @@ void AiConfig::save(const AiConfig& c)
 ```
 Add `core/ai/AiConfig.cpp` to `src/core/CMakeLists.txt` in a new blank-line-separated group after `core/StepRecorder.cpp`.
 
-- [ ] **Step 3: Build**
+- [x] **Step 3: Build**
 
 Run: `cmake --build build`
 Expected: links; `lmms.exe --version` still prints.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add CMakeLists.txt src/core/CMakeLists.txt include/AiConfig.h src/core/ai/AiConfig.cpp
@@ -215,7 +215,7 @@ git commit -m "build: link Qt Network; add AiConfig"
 **Interfaces:**
 - Produces: `AiClient` (above); `OpenAiStreamParser` with `void feed(const QByteArray& chunk)`, `bool finished() const`, `QJsonObject message() const`, signal-free (pure; the client emits). `OpenAiClient(const AiConfig&, QObject*)`.
 
-- [ ] **Step 1: Failing parser tests**
+- [x] **Step 1: Failing parser tests**
 
 `tests/src/core/ai/OpenAiStreamParserTest.cpp`:
 ```cpp
@@ -272,12 +272,12 @@ QTEST_GUILESS_MAIN(OpenAiStreamParserTest)
 ```
 Add `src/core/ai/OpenAiStreamParserTest.cpp` to `LMMS_TESTS` in `tests/CMakeLists.txt`.
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cmake --build build`
 Expected: FAIL — `OpenAiStreamParser.h` not found.
 
-- [ ] **Step 3: Implement parser**
+- [x] **Step 3: Implement parser**
 
 `include/OpenAiStreamParser.h`:
 ```cpp
@@ -417,12 +417,12 @@ QStringList OpenAiStreamParser::takeTextDeltas()
 ```
 Fix the `[DONE]` line to simply `continue;` (finish is set by `finish_reason`). Add both `.cpp` to `src/core/CMakeLists.txt`.
 
-- [ ] **Step 4: Run parser tests**
+- [x] **Step 4: Run parser tests**
 
 Run: `cmake --build build && build/tests/OpenAiStreamParserTest.exe`
 Expected: 4 passed.
 
-- [ ] **Step 5: AiClient + OpenAiClient**
+- [x] **Step 5: AiClient + OpenAiClient**
 
 `include/AiClient.h` — exactly the interface block above (with GPL header, include guards, `#include <QJsonArray>`, `<QJsonObject>`, `<QObject>`, `"lmms_export.h"`).
 
@@ -519,7 +519,7 @@ void OpenAiClient::testConnection(std::function<void(bool, QString)> done)
 ```
 Add to `src/core/CMakeLists.txt`.
 
-- [ ] **Step 6: Build and commit**
+- [x] **Step 6: Build and commit**
 
 Run: `cmake --build build && build/tests/OpenAiStreamParserTest.exe` → PASS.
 ```bash
@@ -538,7 +538,7 @@ git commit -m "ai: OpenAI-compatible client with SSE parser"
 
 **Interfaces:** Produces `AiTool`, `AiToolRegistry` as declared above.
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```cpp
 #include "AiToolRegistry.h"
@@ -579,9 +579,9 @@ QTEST_GUILESS_MAIN(AiToolRegistryTest)
 #include "AiToolRegistryTest.moc"
 ```
 
-- [ ] **Step 2: Verify failure** — build fails on missing header.
+- [x] **Step 2: Verify failure** — build fails on missing header.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `include/AiToolRegistry.h` — the interface block plus `#include <functional>`, `<QJsonArray>`, `<QJsonObject>`, `<QMap>`; private `QMap<QString, AiTool> m_tools;`.
 
@@ -615,9 +615,9 @@ QJsonObject AiToolRegistry::error(const QString& message) { return {{"ok", false
 }
 ```
 
-- [ ] **Step 4: Run** — `build/tests/AiToolRegistryTest.exe` → 3 passed.
+- [x] **Step 4: Run** — `build/tests/AiToolRegistryTest.exe` → 3 passed.
 
-- [ ] **Step 5: Commit** — `git commit -m "ai: tool registry"`.
+- [x] **Step 5: Commit** — `git commit -m "ai: tool registry"`.
 
 ---
 
@@ -632,7 +632,7 @@ QJsonObject AiToolRegistry::error(const QString& message) { return {{"ok", false
 - Consumes: `AiClient`, `AiToolRegistry`.
 - Produces: `AiSession` as declared above. Journal hooks are virtual so the test can stub them: `protected: virtual void beginTurnCheckpoint(); virtual void endTurnCheckpoint();` — default implementation: `Engine::getSong()->addJournalCheckPoint(); Engine::projectJournal()->setJournalling(false);` and `Engine::projectJournal()->setJournalling(true);` respectively. Guard with `if (Engine::getSong())` so the session works without an engine.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```cpp
 #include "AiSession.h"
@@ -755,9 +755,9 @@ QTEST_GUILESS_MAIN(AiSessionTest)
 #include "AiSessionTest.moc"
 ```
 
-- [ ] **Step 2: Verify failure** — build error on missing header.
+- [x] **Step 2: Verify failure** — build error on missing header.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `include/AiSession.h`: interface block; private members:
 ```cpp
@@ -919,9 +919,9 @@ void AiSession::endTurnCheckpoint()
 ```
 Note `failTurn` in `stopsAfterConsecutiveErrors` fires after the cap-th error, and `MaxToolCallsPerTurn` check happens before dispatch so exactly 40 tools run.
 
-- [ ] **Step 4: Run** — `build/tests/AiSessionTest.exe` → 5 passed.
+- [x] **Step 4: Run** — `build/tests/AiSessionTest.exe` → 5 passed.
 
-- [ ] **Step 5: Commit** — `git commit -m "ai: agent session loop with caps, elision, rollback"`.
+- [x] **Step 5: Commit** — `git commit -m "ai: agent session loop with caps, elision, rollback"`.
 
 ---
 
@@ -943,7 +943,7 @@ QJsonObject prop(const QString& type, const QString& description);
 }
 ```
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```cpp
 #include "AiToolRegistry.h"
@@ -1004,9 +1004,9 @@ QTEST_GUILESS_MAIN(AiProjectToolsTest)
 ```
 Note `Song::clearProject()` — check it is public in `include/Song.h`; if it is a private slot, call `Engine::getSong()->createNewProject()` instead (it is public, `Song.h:248`).
 
-- [ ] **Step 2: Verify failure.**
+- [x] **Step 2: Verify failure.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `include/AiTools.h`:
 ```cpp
@@ -1202,9 +1202,9 @@ void registerAiProjectTools(AiToolRegistry& r)
 ```
 Verify accessor names while implementing: `MeterModel::getNumerator()/getDenominator()/numeratorModel()/denominatorModel()` (`include/MeterModel.h`), `Track::isMuted()`, `Clip::name()`, `Note::key()/getVolume()`. Adjust to the real names if they differ; the tests use the tool interface, not these internals.
 
-- [ ] **Step 4: Run** — `build/tests/AiProjectToolsTest.exe` → 3 passed. If `Track::create` asserts on GUI in headless mode, replace with `new InstrumentTrack(Engine::getSong())` followed by `Engine::getSong()->addTrack(track)` — check what `Track::create` does at `src/core/Track.cpp:82-110` first.
+- [x] **Step 4: Run** — `build/tests/AiProjectToolsTest.exe` → 3 passed. If `Track::create` asserts on GUI in headless mode, replace with `new InstrumentTrack(Engine::getSong())` followed by `Engine::getSong()->addTrack(track)` — check what `Track::create` does at `src/core/Track.cpp:82-110` first.
 
-- [ ] **Step 5: Commit** — `git commit -m "ai: project summary/head/instrument-track/notes tools"`.
+- [x] **Step 5: Commit** — `git commit -m "ai: project summary/head/instrument-track/notes tools"`.
 
 ---
 
@@ -1215,7 +1215,7 @@ Verify accessor names while implementing: `MeterModel::getNumerator()/getDenomin
 
 **Interfaces:** Tools `get_track_xml`, `add_track`, `replace_track`, `remove_track`, `get_mixer_xml`, `set_mixer_xml`.
 
-- [ ] **Step 1: Failing tests (append to AiProjectToolsTest)**
+- [x] **Step 1: Failing tests (append to AiProjectToolsTest)**
 
 ```cpp
 	void trackXmlRoundTrip()
@@ -1264,9 +1264,9 @@ Verify accessor names while implementing: `MeterModel::getNumerator()/getDenomin
 	}
 ```
 
-- [ ] **Step 2: Verify failure** — unknown tool errors.
+- [x] **Step 2: Verify failure** — unknown tool errors.
 
-- [ ] **Step 3: Implement (append to AiProjectTools.cpp, register in `registerAiProjectTools`)**
+- [x] **Step 3: Implement (append to AiProjectTools.cpp, register in `registerAiProjectTools`)**
 
 ```cpp
 #include "DataFile.h"
@@ -1373,9 +1373,9 @@ Registrations:
 ```
 Check `DataFile::currentVersion()` exists; if not, expose a static in `DataFile.h` returning `UPGRADE_METHODS.size()` (the value used in the `DataFile(Type)` ctor at `DataFile.cpp:127-139`). `LMMS_VERSION` comes from `lmmsversion.h`. `Track::saveSettings` writes a `<track>` child into the given parent (`Track.cpp:149-190`).
 
-- [ ] **Step 4: Run** — all `AiProjectToolsTest` cases pass.
+- [x] **Step 4: Run** — all `AiProjectToolsTest` cases pass.
 
-- [ ] **Step 5: Commit** — `git commit -m "ai: track/mixer XML tools"`.
+- [x] **Step 5: Commit** — `git commit -m "ai: track/mixer XML tools"`.
 
 ---
 
@@ -1387,7 +1387,7 @@ Check `DataFile::currentVersion()` exists; if not, expose a static in `DataFile.
 
 **Interfaces:** Tools `add_effect`, `set_params`, `describe_model_tree`, `add_automation`, `add_sample_clip`. Shared helper `AutomatableModel* findModel(Model* root, const QString& name)` — matches `displayName()` case-insensitively, then `fullDisplayName()` suffix.
 
-- [ ] **Step 1: Failing tests (append)**
+- [x] **Step 1: Failing tests (append)**
 
 ```cpp
 	void effectAndParams()
@@ -1425,9 +1425,9 @@ Check `DataFile::currentVersion()` exists; if not, expose a static in `DataFile.
 ```
 Add `#include "AutomationClip.h"` to the test.
 
-- [ ] **Step 2: Verify failure.**
+- [x] **Step 2: Verify failure.**
 
-- [ ] **Step 3: Implement (append)**
+- [x] **Step 3: Implement (append)**
 
 ```cpp
 #include "AutomatableModel.h"
@@ -1593,9 +1593,9 @@ static QJsonObject addSampleClip(const QJsonObject& a)
 ```
 Registrations (`add_effect`: `track` or `mixerChannel`, `effect` required, `params` object; `set_params`: `track`, `target`, `params` required; `describe_model_tree`: `track`; `add_automation`: `track`, `target`, `model`, `points[{pos,value}]`, `progression` in `discrete|linear|cubic`; `add_sample_clip`: `file`, `pos`, optional `track`). Path policy for `add_sample_clip` is applied in Task 8 by wrapping the handler (`registerAiDiscoveryTools` re-registers `add_sample_clip` with the policy check in front) — simpler: give `registerAiProjectTools` an optional `AiPathPolicy*` parameter and check `policy && !policy->allows(file)` → error. Update `AiTools.h` accordingly: `void registerAiProjectTools(AiToolRegistry& r, AiPathPolicy* policy = nullptr);`.
 
-- [ ] **Step 4: Run** — all `AiProjectToolsTest` cases pass. Watch for `Effect::instantiate` needing the chain as parent Model (`Effect.cpp:151-168`) — it does.
+- [x] **Step 4: Run** — all `AiProjectToolsTest` cases pass. Watch for `Effect::instantiate` needing the chain as parent Model (`Effect.cpp:151-168`) — it does.
 
-- [ ] **Step 5: Commit** — `git commit -m "ai: effect/param/automation/sample tools"`.
+- [x] **Step 5: Commit** — `git commit -m "ai: effect/param/automation/sample tools"`.
 
 ---
 
@@ -1606,7 +1606,7 @@ Registrations (`add_effect`: `track` or `mixerChannel`, `effect` required, `para
 - Test: `tests/src/core/ai/AiPathPolicyTest.cpp`
 - Modify: CMake lists
 
-- [ ] **Step 1: Failing test**
+- [x] **Step 1: Failing test**
 
 ```cpp
 #include "AiPathPolicy.h"
@@ -1634,9 +1634,9 @@ QTEST_GUILESS_MAIN(AiPathPolicyTest)
 #include "AiPathPolicyTest.moc"
 ```
 
-- [ ] **Step 2: Verify failure.**
+- [x] **Step 2: Verify failure.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```cpp
 // include/AiPathPolicy.h
@@ -1753,9 +1753,9 @@ void registerAiDiscoveryTools(AiToolRegistry& r, AiPathPolicy& policy)
 ```
 `.xpf` content root is `<instrumenttracksettings>` containing `<instrumenttrack>`; the system prompt (Task 10) explains embedding.
 
-- [ ] **Step 4: Run** — `AiPathPolicyTest.exe` passes; build succeeds.
+- [x] **Step 4: Run** — `AiPathPolicyTest.exe` passes; build succeeds.
 
-- [ ] **Step 5: Commit** — `git commit -m "ai: path policy and discovery tools"`.
+- [x] **Step 5: Commit** — `git commit -m "ai: path policy and discovery tools"`.
 
 ---
 
@@ -1869,7 +1869,7 @@ Note: during a turn `AiSession` sets journalling off, so `undo` inside a turn on
 - Create: `include/AiPromptBuilder.h`, `src/core/ai/AiPromptBuilder.cpp` — `QString buildAiSystemPrompt();` reads `ConfigManager::inst()->dataDir() + "ai/system_prompt.md"`, falls back to an embedded minimal string if missing, appends instrument/effect name lists from `PluginFactory`.
 - Test: none (prompt text; the builder is exercised in the smoke test).
 
-- [ ] **Step 1: Write `data/ai/system_prompt.md`**
+- [x] **Step 1: Write `data/ai/system_prompt.md`**
 
 ```markdown
 You are the AI Composer inside LMMS, a digital audio workstation. You create and edit music in the user's open project by calling tools. Work autonomously: plan, call tools, verify with get_project_summary, then reply briefly with what you did.
@@ -1904,7 +1904,7 @@ You are the AI Composer inside LMMS, a digital audio workstation. You create and
 </track>
 ```
 
-- [ ] **Step 2: Prompt builder**
+- [x] **Step 2: Prompt builder**
 
 ```cpp
 // include/AiPromptBuilder.h
@@ -1924,7 +1924,7 @@ QString buildAiSystemPrompt()
 ```
 Data install: in `data/CMakeLists.txt` add `ai` to the installed directory list (read the file — it is 188 bytes — and mirror the existing `INSTALL(DIRECTORY …)` form). For the dev build, `ConfigManager::dataDir()` resolves to the source `data/` dir when running from `build/` (verify by checking `ConfigManager.cpp` `dataDir` initialisation; if it only checks the install prefix, add `../data/` fallback there is *not* in scope — instead run the smoke test with `LMMS_DATA_DIR=/c/git_repos/lmms/data` if such an env var exists in `ConfigManager.cpp`; check, and document the finding in the commit message).
 
-- [ ] **Step 3: Build; commit** — `git commit -m "ai: system prompt and prompt builder"`.
+- [x] **Step 3: Build; commit** — `git commit -m "ai: system prompt and prompt builder"`.
 
 ---
 
@@ -1934,11 +1934,11 @@ Data install: in `data/CMakeLists.txt` add `ai` to the installed directory list 
 - Modify: `src/gui/modals/SetupDialog.cpp` (new AI tab after Paths), `include/SetupDialog.h`
 - Test: manual (open Settings → AI, edit, OK, reopen; values persist in `.lmmsrc.xml`).
 
-- [ ] **Step 1: Header members and slots**
+- [x] **Step 1: Header members and slots**
 
 In `include/SetupDialog.h` add private slots `void setAiBaseUrl(const QString&)`, `void setAiApiKey(const QString&)`, `void setAiModel(const QString&)`, `void testAiConnection()`, `void toggleAiKeyVisible(bool)`; members `QString m_aiBaseUrl, m_aiApiKey, m_aiModel; QLineEdit* m_aiKeyEdit; QLabel* m_aiTestResult;`. Add `AI` to the `ConfigTab` enum if one exists (used by `tab_to_open`), else use index 5.
 
-- [ ] **Step 2: Build the tab (after the Paths block, before "Major tabs ordering")**
+- [x] **Step 2: Build the tab (after the Paths block, before "Major tabs ordering")**
 
 ```cpp
 	// AI widget.
@@ -2001,9 +2001,9 @@ void SetupDialog::testAiConnection()
 In `accept()` before `saveConfigFile()`: `AiConfig::save({m_aiBaseUrl, m_aiApiKey, m_aiModel});`.
 Includes: `"AiConfig.h"`, `"OpenAiClient.h"`, `<QFormLayout>`, `<QCheckBox>`.
 
-- [ ] **Step 3: Build, launch, verify manually** — Edit → Settings → AI: fields present, Test against `http://127.0.0.1:1/v1` shows a ✗ with an HTTP/connection error, OK persists values (check `%APPDATA%/lmms/.lmmsrc.xml` or wherever `ConfigManager` writes — `ConfigManager::inst()->…` path printed via `lmms --help` is not available; find it in `ConfigManager.cpp` `m_lmmsRcFile`).
+- [x] **Step 3: Build, launch, verify manually** — Edit → Settings → AI: fields present, Test against `http://127.0.0.1:1/v1` shows a ✗ with an HTTP/connection error, OK persists values (check `%APPDATA%/lmms/.lmmsrc.xml` or wherever `ConfigManager` writes — `ConfigManager::inst()->…` path printed via `lmms --help` is not available; find it in `ConfigManager.cpp` `m_lmmsRcFile`).
 
-- [ ] **Step 4: Commit** — `git commit -m "ai: settings page"`.
+- [x] **Step 4: Commit** — `git commit -m "ai: settings page"`.
 
 ---
 
@@ -2191,7 +2191,7 @@ Add `gui/ai/AiChatView.cpp` to `src/gui/CMakeLists.txt`.
 - Create: `tests/scripted/ai_mock_server.py` (permanent: documented way to exercise the panel without a key)
 - Modify: `docs/superpowers/specs/2026-09-16-ai-composer-design.md` — no changes expected; update only if implementation deviated.
 
-- [ ] **Step 1: Mock server**
+- [x] **Step 1: Mock server**
 
 ```python
 #!/usr/bin/env python3

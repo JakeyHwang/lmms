@@ -162,6 +162,144 @@ private slots:
 		QVERIFY(!reg.call("add_instrument_track", {{"name", "Y"}, {"instrument", "no_such_plugin"}})["ok"].toBool());
 		QCOMPARE(int(lmms::Engine::getSong()->tracks().size()), 1);
 	}
+	void addNotesLenAndName()
+	{
+		int idx = addBareInstrumentTrack();
+		auto track = lmms::Engine::getSong()->tracks()[idx];
+		auto notes = QJsonArray{QJsonObject{{"pos", 0}, {"len", 48}, {"key", 60}}, QJsonObject{{"pos", 240}, {"len", 48}, {"key", 64}}};
+		// Without len the clip auto-sizes to whole bars covering the notes (note ends at 288 -> 2 bars).
+		auto n = reg.call("add_notes", {{"track", idx}, {"clipPos", 0}, {"notes", notes}});
+		QVERIFY2(n["ok"].toBool(), qPrintable(n["error"].toString()));
+		QCOMPARE(n["len"].toInt(), 384);
+		QCOMPARE(track->getClips()[0]->length().getTicks(), 384);
+		// An explicit len fixes the length and names the clip; a len shorter than the notes is refused.
+		auto m = reg.call("add_notes", {{"track", idx}, {"clipPos", 768}, {"len", 768}, {"name", "Verse"}, {"notes", notes}});
+		QVERIFY2(m["ok"].toBool(), qPrintable(m["error"].toString()));
+		QCOMPARE(m["len"].toInt(), 768);
+		auto clip = dynamic_cast<lmms::MidiClip*>(track->getClips()[1]);
+		QVERIFY(clip);
+		QCOMPARE(clip->length().getTicks(), 768);
+		QCOMPARE(clip->name(), QString("Verse"));
+		QVERIFY(!reg.call("add_notes", {{"track", idx}, {"clipPos", 768}, {"len", 96}, {"notes", QJsonArray{QJsonObject{{"pos", 0}, {"len", 12}, {"key", 60}}}}})["ok"].toBool());
+		QCOMPARE(int(clip->notes().size()), 2);
+		QCOMPARE(clip->length().getTicks(), 768);
+		// clear:true with len only has to cover the new notes.
+		auto c = reg.call("add_notes", {{"track", idx}, {"clipPos", 768}, {"len", 96}, {"clear", true}, {"notes", QJsonArray{QJsonObject{{"pos", 0}, {"len", 12}, {"key", 60}}}}});
+		QVERIFY2(c["ok"].toBool(), qPrintable(c["error"].toString()));
+		QCOMPARE(int(clip->notes().size()), 1);
+		QCOMPARE(clip->length().getTicks(), 96);
+	}
+	void addClipsBatch()
+	{
+		int idx = addBareInstrumentTrack();
+		auto track = lmms::Engine::getSong()->tracks()[idx];
+		auto bar = [](int n) { QJsonArray a; for (int i = 0; i < n; ++i) { a.append(QJsonObject{{"pos", i * 48}, {"len", 48}, {"key", 36}}); } return a; };
+		auto r = reg.call("add_clips", {{"track", idx}, {"clips", QJsonArray{
+			QJsonObject{{"clipPos", 0}, {"name", "Intro"}, {"notes", bar(4)}},
+			QJsonObject{{"clipPos", 768}, {"len", 768}, {"notes", bar(8)}},
+			QJsonObject{{"clipPos", 1536}, {"notes", bar(2)}}}}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		QCOMPARE(r["clipCount"].toInt(), 3);
+		QCOMPARE(r["noteCount"].toInt(), 14);
+		QCOMPARE(int(track->getClips().size()), 3);
+		const int expectPos[] = {0, 768, 1536}, expectNotes[] = {4, 8, 2}, expectLen[] = {192, 768, 192};
+		for (int i = 0; i < 3; ++i)
+		{
+			auto clip = dynamic_cast<lmms::MidiClip*>(track->getClips()[i]);
+			QVERIFY(clip);
+			QCOMPARE(clip->startPosition().getTicks(), expectPos[i]);
+			QCOMPARE(int(clip->notes().size()), expectNotes[i]);
+			QCOMPARE(clip->length().getTicks(), expectLen[i]);
+		}
+		QCOMPARE(track->getClips()[0]->name(), QString("Intro"));
+		auto s = reg.call("get_project_summary", {});
+		QCOMPARE(s["tracks"].toArray()[idx].toObject()["clips"].toArray().size(), 3);
+
+		// One invalid note anywhere in the batch creates nothing.
+		int other = addBareInstrumentTrack();
+		auto bad = reg.call("add_clips", {{"track", other}, {"clips", QJsonArray{
+			QJsonObject{{"clipPos", 0}, {"notes", bar(4)}},
+			QJsonObject{{"clipPos", 768}, {"notes", QJsonArray{QJsonObject{{"pos", 0}, {"len", 48}, {"key", 300}}}}},
+			QJsonObject{{"clipPos", 1536}, {"notes", bar(2)}}}}});
+		QVERIFY(!bad["ok"].toBool());
+		QVERIFY(bad["error"].toString().startsWith("clip 1:"));
+		QCOMPARE(int(lmms::Engine::getSong()->tracks()[other]->getClips().size()), 0);
+		QVERIFY(!reg.call("add_clips", {{"track", other}, {"clips", QJsonArray{}}})["ok"].toBool());
+		QVERIFY(!reg.call("add_clips", {{"track", 99}, {"clips", QJsonArray{QJsonObject{{"clipPos", 0}, {"notes", bar(1)}}}}})["ok"].toBool());
+	}
+	void setTrack()
+	{
+		int idx = addBareInstrumentTrack("Raw");
+		auto t = dynamic_cast<lmms::InstrumentTrack*>(lmms::Engine::getSong()->tracks()[idx]);
+		QVERIFY(t);
+		QCOMPARE(int(lmms::Engine::mixer()->createChannel()), 1);
+		auto r = reg.call("set_track", {{"index", idx}, {"name", "Bass"}, {"volume", 80}, {"pan", -25}, {"muted", true}, {"solo", true}, {"mixerChannel", 1}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		QCOMPARE(t->name(), QString("Bass"));
+		QCOMPARE(int(t->volumeModel()->value()), 80);
+		QCOMPARE(int(t->panningModel()->value()), -25);
+		QVERIFY(t->isMuted());
+		QVERIFY(t->isSolo());
+		QCOMPARE(t->mixerChannelModel()->value(), 1);
+		QCOMPARE(r["volume"].toDouble(), 80.0);
+		QCOMPARE(r["mixerChannel"].toInt(), 1);
+		// Partial update leaves the rest alone.
+		QVERIFY(reg.call("set_track", {{"index", idx}, {"muted", false}})["ok"].toBool());
+		QVERIFY(!t->isMuted());
+		QCOMPARE(int(t->volumeModel()->value()), 80);
+		// Out-of-range values are rejected before anything is written.
+		QVERIFY(!reg.call("set_track", {{"index", idx}, {"name", "Nope"}, {"volume", 250}})["ok"].toBool());
+		QVERIFY(!reg.call("set_track", {{"index", idx}, {"pan", 101}})["ok"].toBool());
+		QVERIFY(!reg.call("set_track", {{"index", idx}, {"mixerChannel", 9}})["ok"].toBool());
+		QVERIFY(!reg.call("set_track", {{"index", 42}, {"muted", true}})["ok"].toBool());
+		QCOMPARE(t->name(), QString("Bass"));
+		QCOMPARE(int(t->volumeModel()->value()), 80);
+		// Automation tracks have a name and mute but no volume.
+		auto a = lmms::Track::create(lmms::Track::Type::Automation, lmms::Engine::getSong());
+		const int autoIdx = int(lmms::Engine::getSong()->tracks().size()) - 1;
+		QVERIFY(reg.call("set_track", {{"index", autoIdx}, {"name", "Sweep"}, {"muted", true}})["ok"].toBool());
+		QCOMPARE(a->name(), QString("Sweep"));
+	}
+	// Sample tracks: volume/pan live on the track's bus handle (no public accessors), set via set_track.
+	void setTrackOnSampleTrack()
+	{
+		QTemporaryDir dir;
+		QVERIFY(dir.isValid());
+		const QString file = writeTestWav(dir);
+		QVERIFY2(!file.isEmpty(), "could not write test wav");
+		auto r = reg.call("add_sample_clip", {{"file", file}, {"pos", 0}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		int idx = r["track"].toInt();
+		auto st = dynamic_cast<lmms::SampleTrack*>(lmms::Engine::getSong()->tracks()[idx]);
+		QVERIFY(st);
+		QCOMPARE(int(lmms::Engine::mixer()->createChannel()), 1);
+		auto s = reg.call("set_track", {{"index", idx}, {"name", "Vox"}, {"volume", 55}, {"pan", 20}, {"mixerChannel", 1}});
+		QVERIFY2(s["ok"].toBool(), qPrintable(s["error"].toString()));
+		QCOMPARE(st->name(), QString("Vox"));
+		QCOMPARE(s["volume"].toDouble(), 55.0);
+		QCOMPARE(s["pan"].toDouble(), 20.0);
+		QCOMPARE(s["mixerChannel"].toInt(), 1);
+		QCOMPARE(st->mixerChannelModel()->value(), 1);
+		// The bus handle is what actually routes the track's level/pan to the mixer channel.
+		QCOMPARE(int(st->audioBusHandle()->nextMixerChannel()), 1);
+	}
+	void removeClip()
+	{
+		int idx = addBareInstrumentTrack();
+		auto track = lmms::Engine::getSong()->tracks()[idx];
+		auto notes = QJsonArray{QJsonObject{{"pos", 0}, {"len", 48}, {"key", 60}}};
+		QVERIFY(reg.call("add_clips", {{"track", idx}, {"clips", QJsonArray{QJsonObject{{"clipPos", 0}, {"notes", notes}}, QJsonObject{{"clipPos", 192}, {"notes", notes}}}}})["ok"].toBool());
+		QCOMPARE(int(track->getClips().size()), 2);
+		QVERIFY(!reg.call("remove_clip", {{"track", idx}, {"clipPos", 96}})["ok"].toBool());
+		QVERIFY(!reg.call("remove_clip", {{"track", 7}, {"clipPos", 0}})["ok"].toBool());
+		QCOMPARE(int(track->getClips().size()), 2);
+		auto r = reg.call("remove_clip", {{"track", idx}, {"clipPos", 0}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		QCOMPARE(r["clipCount"].toInt(), 1);
+		QCOMPARE(int(track->getClips().size()), 1);
+		QCOMPARE(track->getClips()[0]->startPosition().getTicks(), 192);
+		QCOMPARE(reg.call("get_project_summary", {})["tracks"].toArray()[idx].toObject()["clips"].toArray().size(), 1);
+	}
 
 	// --- Task 6: XML surface ---
 	// Instrument plugins cannot load here (see hasTripleOscillator), so round trips use bare

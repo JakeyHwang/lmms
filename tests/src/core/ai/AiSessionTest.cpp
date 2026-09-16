@@ -145,7 +145,8 @@ private slots:
 	void stopsAtToolCallCap()
 	{
 		FakeAiClient c; TestSession s(&c, &reg);
-		for (int i = 0; i < 100; ++i) c.scripted << toolCallMsg({"a", "a", "a"});
+		// Three calls per message; one message more than the cap needs, so the cap and not the script ends the turn.
+		for (int i = 0; i <= lmms::AiSession::MaxToolCallsPerTurn / 3; ++i) c.scripted << toolCallMsg({"a", "a", "a"});
 		QSignalSpy failed(&s, &lmms::AiSession::turnFailed);
 		s.submit("go");
 		QVERIFY(failed.wait(5000));

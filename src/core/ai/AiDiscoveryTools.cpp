@@ -115,31 +115,35 @@ static QJsonObject presetXml(const AiPathPolicy& policy, const QString& path)
 
 void registerAiDiscoveryTools(AiToolRegistry& r, AiPathPolicy& policy)
 {
-	r.add({"list_instruments", "Instrument plugins available for add_instrument_track.", schema({}),
-		[](const QJsonObject&) { return R::ok({{"instruments", listPlugins(Plugin::Type::Instrument)}}); }});
-	r.add({"list_effects", "Effect plugins available for add_effect.", schema({}),
-		[](const QJsonObject&) { return R::ok({{"effects", listPlugins(Plugin::Type::Effect)}}); }});
+	r.add({"list_instruments",
+		"WHAT: every instrument plugin installed, with name (the id add_instrument_track takes), displayName and a one-line description. "
+		"WHEN: the system prompt's instrument list is enough for common choices; call this when you need the descriptions or are unsure a name exists. RETURNS {instruments}.",
+		schema({}), [](const QJsonObject&) { return R::ok({{"instruments", listPlugins(Plugin::Type::Instrument)}}); }});
+	r.add({"list_effects",
+		"WHAT: every effect plugin installed, with name (the id add_effect takes), displayName and description. WHEN: choosing reverb/delay/compressor/eq names you are not sure about. "
+		"RETURNS {effects}. Gotcha: LADSPA/VST/LV2 host plugins are listed but cannot be added by name.",
+		schema({}), [](const QJsonObject&) { return R::ok({{"effects", listPlugins(Plugin::Type::Effect)}}); }});
 	r.add({"list_presets",
-		"Instrument preset files (.xpf) in the factory and user preset dirs, readable with get_preset_xml. Optional case-insensitive "
-		"substring query on the path, e.g. 'bass' or 'TripleOscillator'.",
-		schema({{"query", prop("string", "substring filter, empty for all")}, {"limit", prop("integer", "max results, default 50")}}),
+		"WHAT: instrument preset files (.xpf) in the factory and user preset folders, filtered by a case-insensitive substring of the path (folder = plugin name). "
+		"WHEN: you want a ready-made sound (drum kit, bass, pad, lead) instead of raw plugin defaults; feed a path to get_preset_xml. RETURNS {presets, truncated}. Gotcha: query 'drum' or 'kick' for drum sounds.",
+		schema({{"query", prop("string", "substring filter, e.g. 'bass', 'drum', 'TripleOscillator'; empty for all")}, {"limit", prop("integer", "max results, default 50, max 500")}}),
 		[](const QJsonObject& a) {
 			auto cm = ConfigManager::inst();
 			return listFiles("presets", {cm->factoryPresetsDir(), cm->userPresetsDir()}, {"*.xpf"}, a);
 		}});
 	r.add({"list_samples",
-		"Sample files (.wav/.ogg/.flac/.mp3/.aiff) in the factory and user sample dirs. Optional case-insensitive "
-		"substring query on the path, e.g. 'kick'.",
-		schema({{"query", prop("string", "substring filter, empty for all")}, {"limit", prop("integer", "max results, default 50")}}),
+		"WHAT: audio files (.wav/.ogg/.flac/.mp3/.aiff) in the factory and user sample folders, filtered by a case-insensitive path substring. "
+		"WHEN: you need a one-shot or loop for add_sample_clip, e.g. query 'kick', 'snare', 'hihat'. RETURNS {samples, truncated}. Gotcha: paths are absolute; pass them unchanged.",
+		schema({{"query", prop("string", "substring filter, e.g. 'kick'; empty for all")}, {"limit", prop("integer", "max results, default 50, max 500")}}),
 		[](const QJsonObject& a) {
 			auto cm = ConfigManager::inst();
 			return listFiles("samples", {cm->factorySamplesDir(), cm->userSamplesDir()},
 				{"*.wav", "*.ogg", "*.flac", "*.mp3", "*.aiff"}, a);
 		}});
 	r.add({"get_preset_xml",
-		"Read a preset file (from list_presets or a path the user gave) and return its <instrumenttrack> XML, "
-		"ready to embed in a <track type=\"0\"> element for add_track.",
-		schema({{"path", prop("string", "absolute path of a .xpf file")}}, {"path"}),
+		"WHAT: read a .xpf preset and return its <instrumenttrack> element, upgraded to the current format. "
+		"WHEN: after list_presets; wrap the result as <track type=\"0\" name=\"..\">...</track> and pass it to add_track, then write notes on the returned index. RETURNS {xml}. Gotcha: .xiz files are not presets.",
+		schema({{"path", prop("string", "absolute path of a .xpf file from list_presets")}}, {"path"}),
 		[&policy](const QJsonObject& a) { return presetXml(policy, a["path"].toString()); }});
 }
 

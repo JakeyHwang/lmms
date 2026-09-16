@@ -24,6 +24,7 @@
 
 #include "AiTools.h"
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -165,26 +166,60 @@ static QJsonObject addInstrumentTrack(const QJsonObject& a)
 	return R::ok({{"index", index}});
 }
 
-static QJsonObject addNotes(const QJsonObject& a)
+// --- Notes and clips ------------------------------------------------------------------------
+
+//! End (ticks from clip start) of the last-ending note in `notes`, 0 when empty.
+static int notesEnd(const NoteVector& notes)
 {
-	QString err;
-	auto track = instrumentTrackAt(a["track"].toInt(-1), &err);
-	if (!track) { return R::error(err); }
-	if (!a["notes"].isArray()) { return R::error("notes must be an array"); }
-	auto notes = a["notes"].toArray();
-	for (auto v : notes)
+	int end = 0;
+	for (auto n : notes) { end = std::max(end, int(n->endPos())); }
+	return end;
+}
+
+//! Checks one clip spec {clipPos, len?, name?, notes, clear?} against `track` without touching
+//! it: every note, and `len` against the notes it would have to cover (the new ones plus the
+//! existing ones when not clearing). `*err` is set on failure.
+static bool validateClipSpec(InstrumentTrack* track, const QJsonObject& spec, QString* err)
+{
+	if (!spec["notes"].isArray()) { *err = "notes must be an array"; return false; }
+	const int clipPos = spec["clipPos"].toInt(-1);
+	if (clipPos < 0) { *err = "clipPos must be >= 0 ticks"; return false; }
+	int end = 0;
+	for (auto v : spec["notes"].toArray())
 	{
 		auto n = v.toObject();
-		int key = n["key"].toInt(-1);
-		if (key < 0 || key >= NumKeys) { return R::error(QString("note key %1 out of range 0..%2").arg(key).arg(NumKeys - 1)); }
-		if (n["len"].toInt(0) <= 0) { return R::error("note len must be > 0 ticks"); }
-		if (n["pos"].toInt(0) < 0) { return R::error("note pos must be >= 0 ticks"); }
-		int vol = n["vol"].toInt(DefaultVolume);
-		if (vol < 0 || vol > MaxVolume) { return R::error(QString("note vol %1 out of range 0..%2").arg(vol).arg(int(MaxVolume))); }
-		int pan = n["pan"].toInt(DefaultPanning);
-		if (pan < PanningLeft || pan > PanningRight) { return R::error(QString("note pan %1 out of range %2..%3").arg(pan).arg(int(PanningLeft)).arg(int(PanningRight))); }
+		const int key = n["key"].toInt(-1);
+		if (key < 0 || key >= NumKeys) { *err = QString("note key %1 out of range 0..%2").arg(key).arg(NumKeys - 1); return false; }
+		if (n["len"].toInt(0) <= 0) { *err = "note len must be > 0 ticks"; return false; }
+		if (n["pos"].toInt(0) < 0) { *err = "note pos must be >= 0 ticks"; return false; }
+		const int vol = n["vol"].toInt(DefaultVolume);
+		if (vol < 0 || vol > MaxVolume) { *err = QString("note vol %1 out of range 0..%2").arg(vol).arg(int(MaxVolume)); return false; }
+		const int pan = n["pan"].toInt(DefaultPanning);
+		if (pan < PanningLeft || pan > PanningRight) { *err = QString("note pan %1 out of range %2..%3").arg(pan).arg(int(PanningLeft)).arg(int(PanningRight)); return false; }
+		end = std::max(end, n["pos"].toInt(0) + n["len"].toInt());
 	}
-	TimePos clipPos(a["clipPos"].toInt(0));
+	if (spec.contains("len"))
+	{
+		const int len = spec["len"].toInt(0);
+		if (len <= 0) { *err = "clip len must be > 0 ticks"; return false; }
+		if (!spec["clear"].toBool(false))
+		{
+			for (auto c : track->getClips())
+			{
+				if (auto mc = dynamic_cast<MidiClip*>(c); mc && c->startPosition() == TimePos(clipPos)) { end = std::max(end, notesEnd(mc->notes())); }
+			}
+		}
+		if (len < end) { *err = QString("clip len %1 is shorter than its notes (last note ends at %2)").arg(len).arg(end); return false; }
+	}
+	return true;
+}
+
+//! Applies a validated clip spec: the clip at clipPos is reused or created, optionally cleared
+//! and named, the notes are added, and an explicit `len` fixes the clip length (which otherwise
+//! auto-grows to whole bars covering the notes). Returns the clip, or nullptr when none could be made.
+static MidiClip* applyClipSpec(InstrumentTrack* track, const QJsonObject& spec)
+{
+	const TimePos clipPos(spec["clipPos"].toInt(0));
 	MidiClip* clip = nullptr;
 	for (auto c : track->getClips())
 	{
@@ -192,19 +227,80 @@ static QJsonObject addNotes(const QJsonObject& a)
 	}
 	// createClip -> Clip::movePosition takes the audio-engine change lock itself; keep it outside the guard.
 	if (!clip) { clip = dynamic_cast<MidiClip*>(track->createClip(clipPos)); }
-	if (!clip) { return R::error("Could not create clip"); }
+	if (!clip) { return nullptr; }
+	auto guard = Engine::audioEngine()->requestChangesGuard();
+	if (spec["clear"].toBool(false)) { clip->clearNotes(); }
+	if (spec.contains("name")) { clip->setName(spec["name"].toString()); }
+	for (auto v : spec["notes"].toArray())
 	{
-		auto guard = Engine::audioEngine()->requestChangesGuard();
-		if (a["clear"].toBool(false)) { clip->clearNotes(); }
-		for (auto v : notes)
-		{
-			auto n = v.toObject();
-			Note note(TimePos(n["len"].toInt()), TimePos(n["pos"].toInt(0)), n["key"].toInt(),
-				volume_t(n["vol"].toInt(DefaultVolume)), panning_t(n["pan"].toInt(DefaultPanning)));
-			clip->addNote(note, false);
-		}
+		auto n = v.toObject();
+		Note note(TimePos(n["len"].toInt()), TimePos(n["pos"].toInt(0)), n["key"].toInt(),
+			volume_t(n["vol"].toInt(DefaultVolume)), panning_t(n["pan"].toInt(DefaultPanning)));
+		clip->addNote(note, false);
 	}
-	return R::ok({{"track", a["track"].toInt()}, {"clipPos", clipPos.getTicks()}, {"noteCount", int(clip->notes().size())}});
+	if (spec.contains("len"))
+	{
+		// A manually sized clip stays that size when notes are added later, as in the song editor.
+		clip->setAutoResize(false);
+		clip->changeLength(TimePos(spec["len"].toInt()));
+	}
+	return clip;
+}
+
+static QJsonObject addNotes(const QJsonObject& a)
+{
+	QString err;
+	auto track = instrumentTrackAt(a["track"].toInt(-1), &err);
+	if (!track) { return R::error(err); }
+	if (!validateClipSpec(track, a, &err)) { return R::error(err); }
+	auto clip = applyClipSpec(track, a);
+	if (!clip) { return R::error("Could not create clip"); }
+	return R::ok({{"track", a["track"].toInt()}, {"clipPos", clip->startPosition().getTicks()},
+		{"len", clip->length().getTicks()}, {"noteCount", int(clip->notes().size())}});
+}
+
+static QJsonObject addClips(const QJsonObject& a)
+{
+	QString err;
+	auto track = instrumentTrackAt(a["track"].toInt(-1), &err);
+	if (!track) { return R::error(err); }
+	if (!a["clips"].isArray() || a["clips"].toArray().isEmpty()) { return R::error("clips must be a non-empty array"); }
+	const auto clips = a["clips"].toArray();
+	// Every clip is checked before any is written, so one bad note leaves the track untouched.
+	for (int i = 0; i < clips.size(); ++i)
+	{
+		if (!validateClipSpec(track, clips[i].toObject(), &err)) { return R::error(QString("clip %1: %2").arg(i).arg(err)); }
+	}
+	int noteCount = 0;
+	QJsonArray made;
+	for (auto v : clips)
+	{
+		auto clip = applyClipSpec(track, v.toObject());
+		if (!clip) { return R::error("Could not create clip"); }
+		noteCount += int(clip->notes().size());
+		made.append(QJsonObject{{"clipPos", clip->startPosition().getTicks()}, {"len", clip->length().getTicks()}, {"noteCount", int(clip->notes().size())}});
+	}
+	return R::ok({{"track", a["track"].toInt()}, {"clipCount", made.size()}, {"noteCount", noteCount}, {"clips", made}});
+}
+
+static QJsonObject removeClip(const QJsonObject& a)
+{
+	QString err;
+	auto track = trackAt(a["track"].toInt(-1), &err);
+	if (!track) { return R::error(err); }
+	const TimePos clipPos(a["clipPos"].toInt(-1));
+	Clip* clip = nullptr;
+	for (auto c : track->getClips())
+	{
+		if (c->startPosition() == clipPos) { clip = c; break; }
+	}
+	if (!clip) { return R::error(QString("Track %1 has no clip starting at %2 (see get_project_summary)").arg(a["track"].toInt()).arg(a["clipPos"].toInt(-1))); }
+	{
+		// ~Clip unlinks itself from the track and closes its view; the audio engine must be paused for it.
+		auto guard = Engine::audioEngine()->requestChangesGuard();
+		delete clip;
+	}
+	return R::ok({{"track", a["track"].toInt()}, {"clipCount", int(track->getClips().size())}});
 }
 
 // --- XML surface ---------------------------------------------------------------------------
@@ -531,6 +627,61 @@ static AutomatableModel* findModel(Model* root, const QString& name)
 	return nullptr;
 }
 
+//! Quick mixing: name, volume, pan, mute, solo and mixer channel of one track in a single call.
+//! Volume/pan/mixer channel exist on instrument and sample tracks only; everything is checked
+//! before anything is written.
+static QJsonObject setTrack(const QJsonObject& a)
+{
+	QString err;
+	auto track = trackAt(a["index"].toInt(-1), &err);
+	if (!track) { return R::error(err); }
+	// Both track types name their models "Volume"/"Panning"; SampleTrack has no accessor for them.
+	AutomatableModel* volume = findModel(track, "Volume");
+	AutomatableModel* pan = findModel(track, "Panning");
+	IntModel* mixer = nullptr;
+	if (auto it = dynamic_cast<InstrumentTrack*>(track)) { mixer = it->mixerChannelModel(); }
+	else if (auto st = dynamic_cast<SampleTrack*>(track)) { mixer = st->mixerChannelModel(); }
+	const QString notAudio = QString("Track %1 is not an instrument or sample track").arg(a["index"].toInt());
+	if (a.contains("volume"))
+	{
+		if (!volume) { return R::error(notAudio); }
+		const double v = a["volume"].toDouble(-1);
+		if (v < MinVolume || v > MaxVolume) { return R::error(QString("volume must be %1..%2").arg(int(MinVolume)).arg(int(MaxVolume))); }
+	}
+	if (a.contains("pan"))
+	{
+		if (!pan) { return R::error(notAudio); }
+		const double v = a["pan"].toDouble(PanningLeft - 1);
+		if (v < PanningLeft || v > PanningRight) { return R::error(QString("pan must be %1..%2").arg(int(PanningLeft)).arg(int(PanningRight))); }
+	}
+	if (a.contains("mixerChannel"))
+	{
+		if (!mixer) { return R::error(notAudio); }
+		const int ch = a["mixerChannel"].toInt(-1);
+		if (ch < 0 || ch >= Engine::mixer()->numChannels()) { return R::error(QString("mixerChannel must be 0..%1").arg(Engine::mixer()->numChannels() - 1)); }
+	}
+	{
+		auto guard = Engine::audioEngine()->requestChangesGuard();
+		if (a.contains("name")) { track->setName(a["name"].toString()); }
+		if (a.contains("volume")) { volume->setValue(float(a["volume"].toDouble())); }
+		if (a.contains("pan")) { pan->setValue(float(a["pan"].toDouble())); }
+		if (a.contains("muted")) { track->setMuted(a["muted"].toBool()); }
+		// The solo model does the cross-track muting through the song editor's view, as the solo button does.
+		if (a.contains("solo")) { track->setSolo(a["solo"].toBool()); }
+		if (a.contains("mixerChannel"))
+		{
+			// The model's range is only widened by the mixer view when channels are added; refresh it as set_mixer_xml does.
+			mixer->setRange(0, Engine::mixer()->numChannels() - 1);
+			mixer->setValue(a["mixerChannel"].toInt());
+		}
+	}
+	QJsonObject out{{"index", a["index"].toInt()}, {"name", track->name()}, {"muted", track->isMuted()}, {"solo", track->isSolo()}};
+	if (volume) { out["volume"] = double(volume->value<float>()); }
+	if (pan) { out["pan"] = double(pan->value<float>()); }
+	if (mixer) { out["mixerChannel"] = mixer->value(); }
+	return R::ok(out);
+}
+
 static QJsonArray describeModels(Model* root)
 {
 	QJsonArray out;
@@ -709,44 +860,100 @@ static QJsonObject addSampleClip(const QJsonObject& a, const std::function<bool(
 
 void registerAiProjectTools(AiToolRegistry& r, std::function<bool(const QString&)> pathAllowed)
 {
-	r.add({"get_project_summary", "Compact overview of the open project: tempo, time signature, tracks, clips. Call this first.", schema({}), projectSummary});
-	r.add({"get_head", "Tempo, time signature, master volume/pitch.", schema({}), getHead});
-	r.add({"set_head", "Set tempo (bpm), time signature, master volume/pitch. All fields optional.",
-		schema({{"bpm", prop("integer", "10..999")}, {"timesigNum", prop("integer", "")}, {"timesigDen", prop("integer", "")},
-			{"masterVol", prop("integer", "0..200")}, {"masterPitch", prop("integer", "-12..12 semitones")}}), setHead});
-	r.add({"add_instrument_track", "Create an instrument track with the given plugin (see list_instruments); omit instrument for an empty track. Returns its index.",
-		schema({{"name", prop("string", "track name")}, {"instrument", prop("string", "plugin name, e.g. tripleoscillator, kicker, sf2player; omit for an empty track")},
-			{"mixerChannel", prop("integer", "mixer channel, 0 = master")}}), addInstrumentTrack});
-	r.add({"add_notes", "Add notes to a MIDI clip on an instrument track (creates the clip at clipPos if missing). Ticks: 192 per bar in 4/4, quarter=48, 16th=12. key is MIDI number (60 = C4).",
-		schema({{"track", prop("integer", "track index")}, {"clipPos", prop("integer", "clip start in ticks")},
-			{"notes", QJsonObject{{"type", "array"}, {"items", schema({{"pos", prop("integer", "ticks from clip start")}, {"len", prop("integer", "ticks")},
-				{"key", prop("integer", "0..127")}, {"vol", prop("integer", "0..200, default 100")}, {"pan", prop("integer", "-100..100")}}, {"pos", "len", "key"})}}},
-			{"clear", prop("boolean", "remove existing notes first")}}, {"track", "clipPos", "notes"}), addNotes});
-	r.add({"get_track_xml", "Full <track> XML for one track (instrument settings, effects, clips, notes). Same format as .mmp files.",
-		schema({{"index", prop("integer", "track index")}}, {"index"}), getTrackXml});
-	r.add({"add_track", "Append a track from <track> XML (as returned by get_track_xml or built from a preset); current .mmp format only (no legacy upgrade). Returns its index.",
-		schema({{"xml", prop("string", "<track type=\"0\" name=\"...\">...</track>")}}, {"xml"}), addTrackXml});
-	r.add({"replace_track", "Replace the track at index with new <track> XML, keeping its position; current .mmp format only (no legacy upgrade). Automation on other tracks targeting the old track's models is dropped.",
-		schema({{"index", prop("integer", "track index")}, {"xml", prop("string", "<track ...>...</track>")}}, {"index", "xml"}), replaceTrackXml});
-	r.add({"remove_track", "Delete a track. Returns the remaining track count.", schema({{"index", prop("integer", "track index")}}, {"index"}), removeTrack});
-	r.add({"get_mixer_xml", "Mixer channels, names, volumes, sends and channel effect chains as <mixer> XML.", schema({}), getMixerXml});
-	r.add({"set_mixer_xml", "Replace the whole mixer from <mixer> XML (as returned by get_mixer_xml). Track routing is preserved.",
+	// Shared schema pieces for add_notes / add_clips.
+	const QJsonObject noteItems = schema({{"pos", prop("integer", "ticks from clip start")}, {"len", prop("integer", "ticks, > 0")},
+		{"key", prop("integer", "MIDI key 0..127, 60 = C4")}, {"vol", prop("integer", "0..200, default 100")}, {"pan", prop("integer", "-100..100, default 0")}}, {"pos", "len", "key"});
+	const QJsonObject notesArray{{"type", "array"}, {"items", noteItems}};
+	const QJsonObject clipPos = prop("integer", "clip start, absolute ticks from song start (bar N = (N-1)*ticksPerBar)");
+	const QJsonObject clipLen = prop("integer", "clip length in ticks; must cover the notes. Omit to auto-size to whole bars");
+	const QJsonObject clipName = prop("string", "clip name shown in the song editor, e.g. 'Verse'");
+	const QJsonObject clipClear = prop("boolean", "replace the notes of an existing clip at clipPos instead of adding to them");
+	const QJsonObject trackIndex = prop("integer", "track index from get_project_summary");
+	const QJsonObject trackOrMixer = prop("integer", "track index (or give mixerChannel instead)");
+	const QJsonObject mixerIndex = prop("integer", "mixer channel index, 0 = master");
+
+	r.add({"get_project_summary",
+		"WHAT: compact state of the open project: bpm, time signature, ticksPerBar, lengthBars, every track (index, type, instrument, volume, muted, clips with pos/len/noteCount). "
+		"WHEN: first call of every turn and last call to verify; cheaper than get_track_xml. RETURNS the summary object. Gotcha: indices shift after remove_track.",
+		schema({}), projectSummary});
+	r.add({"get_head",
+		"WHAT: tempo, time signature, master volume and master pitch only. WHEN: you need masterVol/masterPitch, which get_project_summary omits. "
+		"RETURNS {bpm, timesigNum, timesigDen, masterVol, masterPitch}.",
+		schema({}), getHead});
+	r.add({"set_head",
+		"WHAT: set tempo, time signature, master volume/pitch; every field optional. WHEN: once at the start of a song, before writing notes (ticksPerBar depends on the time signature). "
+		"UNITS: bpm 10..999, masterVol 0..200, masterPitch semitones. RETURNS the new head. Gotcha: changing the time signature later does not move existing clips.",
+		schema({{"bpm", prop("integer", "10..999")}, {"timesigNum", prop("integer", "beats per bar, e.g. 4")}, {"timesigDen", prop("integer", "beat unit, e.g. 4")},
+			{"masterVol", prop("integer", "0..200, 100 = unity")}, {"masterPitch", prop("integer", "-12..12 semitones")}}), setHead});
+	r.add({"add_instrument_track",
+		"WHAT: append an instrument track loading a plugin by name (list_instruments). WHEN: one call per part: drums, bass, chords, lead. Use add_track with get_preset_xml when you want a preset sound instead. "
+		"RETURNS {index} for add_clips/add_notes/set_track. Gotcha: omitting instrument gives a silent empty track.",
+		schema({{"name", prop("string", "track name, e.g. 'Bass'")}, {"instrument", prop("string", "plugin name from list_instruments, e.g. tripleoscillator, kicker, sf2player")},
+			{"mixerChannel", mixerIndex}}), addInstrumentTrack});
+	r.add({"add_notes",
+		"WHAT: write notes into one MIDI clip on an instrument track, creating the clip at clipPos if missing. WHEN: a single clip, or editing one (clear:true replaces its notes); several clips per track → add_clips. "
+		"UNITS: ticks (192/bar in 4/4: quarter 48, eighth 24, sixteenth 12); note pos is relative to the clip. RETURNS {track, clipPos, len, noteCount}. Gotcha: without len the clip auto-grows to whole bars covering its notes.",
+		schema({{"track", trackIndex}, {"clipPos", clipPos}, {"len", clipLen}, {"name", clipName}, {"notes", notesArray}, {"clear", clipClear}}, {"track", "clipPos", "notes"}), addNotes});
+	r.add({"add_clips",
+		"WHAT: batch of add_notes: several clips on one instrument track in one call (intro/verse/chorus material). WHEN: laying out a song section by section; one call per track. "
+		"Each clip is {clipPos, notes, len?, name?, clear?} exactly as add_notes. All are validated before any is written: one bad note creates nothing. RETURNS {track, clipCount, noteCount, clips}. Gotcha: clipPos must equal the start of a clip you want to reuse.",
+		schema({{"track", trackIndex}, {"clips", QJsonObject{{"type", "array"}, {"items",
+			schema({{"clipPos", clipPos}, {"len", clipLen}, {"name", clipName}, {"notes", notesArray}, {"clear", clipClear}}, {"clipPos", "notes"})}}}}, {"track", "clips"}), addClips});
+	r.add({"remove_clip",
+		"WHAT: delete the clip that starts at clipPos on a track (MIDI, sample or automation). WHEN: dropping a section or redoing one clip; to rewrite notes in place use add_notes with clear:true instead. "
+		"UNITS: absolute ticks, as listed by get_project_summary. RETURNS {track, clipCount}. Gotcha: clipPos must match the clip's start exactly.",
+		schema({{"track", trackIndex}, {"clipPos", prop("integer", "clip start in absolute ticks")}}, {"track", "clipPos"}), removeClip});
+	r.add({"set_track",
+		"WHAT: quick mix of one track: name, volume, pan, mute, solo, mixer channel; every field optional. WHEN: balancing levels and panning after writing parts; faster than describe_model_tree + set_params. "
+		"UNITS: volume 0..200 (100 = unity), pan -100..100. RETURNS the resulting values. Gotcha: volume/pan/mixerChannel need an instrument or sample track; use add_automation for changes over time.",
+		schema({{"index", trackIndex}, {"name", prop("string", "new track name")}, {"volume", prop("number", "0..200, 100 = unity")}, {"pan", prop("number", "-100 (left)..100 (right)")},
+			{"muted", prop("boolean", "mute the track")}, {"solo", prop("boolean", "solo the track")}, {"mixerChannel", mixerIndex}}, {"index"}), setTrack});
+	r.add({"get_track_xml",
+		"WHAT: the full <track> element of one track in .mmp format: instrument settings, effect chain, clips and notes. WHEN: you need something the convenience tools do not expose, or as a template for add_track/replace_track. "
+		"RETURNS {index, xml}. Gotcha: fails over 64 KB; fall back to get_project_summary.",
+		schema({{"index", trackIndex}}, {"index"}), getTrackXml});
+	r.add({"add_track",
+		"WHAT: append a track from <track> XML (from get_track_xml, or <track type=\"0\" name=\"..\"> wrapping get_preset_xml output). WHEN: using a preset sound, cloning a track, or any feature the convenience tools lack. "
+		"RETURNS {index}. Gotcha: current .mmp format only; local: plugin paths are rejected.",
+		schema({{"xml", prop("string", "<track type=\"0|1|2|5\" name=\"...\">...</track>")}}, {"xml"}), addTrackXml});
+	r.add({"replace_track",
+		"WHAT: swap the track at index for new <track> XML, keeping its position. WHEN: changing a track's instrument or effects wholesale after editing get_track_xml output. "
+		"RETURNS {index}. Gotcha: automation clips on other tracks that targeted the old track's parameters are disconnected.",
+		schema({{"index", trackIndex}, {"xml", prop("string", "<track ...>...</track>")}}, {"index", "xml"}), replaceTrackXml});
+	r.add({"remove_track",
+		"WHAT: delete a track and all its clips. WHEN: removing a part you replaced; for one clip use remove_clip. RETURNS {trackCount}. Gotcha: every track after it moves down one index; re-read get_project_summary.",
+		schema({{"index", trackIndex}}, {"index"}), removeTrack});
+	r.add({"get_mixer_xml",
+		"WHAT: the whole mixer as <mixer> XML: channels, names, volumes, sends, effect chains. WHEN: building buses or sends (edit and pass to set_mixer_xml). RETURNS {xml}. Gotcha: add_effect with mixerChannel is enough for channel effects.",
+		schema({}), getMixerXml});
+	r.add({"set_mixer_xml",
+		"WHAT: replace the entire mixer from <mixer> XML. WHEN: after editing get_mixer_xml output to add channels or sends. RETURNS {channels}. Gotcha: replaces everything; tracks keep their channel numbers, so keep the channels they point at.",
 		schema({{"xml", prop("string", "<mixer>...</mixer>")}}, {"xml"}), setMixerXml});
-	r.add({"add_effect", "Add an effect plugin (see list_effects) to an instrument/sample track's chain or a mixer channel's chain. Optional params are applied as with set_params.",
-		schema({{"track", prop("integer", "track index (or give mixerChannel)")}, {"mixerChannel", prop("integer", "mixer channel index")},
-			{"effect", prop("string", "plugin name, e.g. amplifier, reverbsc, eq")}, {"params", prop("object", "{name: value} as listed by describe_model_tree")}}, {"effect"}), addEffect});
-	r.add({"set_params", "Set parameters by name on a track (volume, panning, pitch...), its instrument, or one of its effects. Names are case-insensitive; describe_model_tree lists them with ranges.",
-		schema({{"track", prop("integer", "track index (or give mixerChannel)")}, {"mixerChannel", prop("integer", "mixer channel index (target must be effect:N)")},
+	r.add({"add_effect",
+		"WHAT: append an effect plugin (list_effects) to a track's chain or a mixer channel's chain, optionally with initial params. WHEN: reverb/delay/compressor/eq per part, or on a channel to share it. "
+		"RETURNS {effectIndex, params}; effectIndex is the target effect:N for set_params. Gotcha: give track OR mixerChannel; param names come from describe_model_tree.",
+		schema({{"track", trackOrMixer}, {"mixerChannel", mixerIndex},
+			{"effect", prop("string", "plugin name from list_effects, e.g. reverbsc, delay, compressor, eq, bassbooster, amplifier")}, {"params", prop("object", "{name: value} as listed by describe_model_tree")}}, {"effect"}), addEffect});
+	r.add({"set_params",
+		"WHAT: set named parameters on a track, its instrument or an effect. WHEN: sound design (instrument knobs, effect settings); for level/pan/mute use set_track. "
+		"Names are case-insensitive; 'Parent>Name' paths disambiguate duplicates. RETURNS {applied} with clamped values. Gotcha: one unknown name rejects the whole call; check describe_model_tree.",
+		schema({{"track", trackOrMixer}, {"mixerChannel", prop("integer", "mixer channel index (then target must be effect:N)")},
 			{"target", prop("string", "track | instrument | effect:N")}, {"params", prop("object", "{name: value}")}}, {"target", "params"}), setParams});
-	r.add({"describe_model_tree", "List automatable parameters (name, value, min, max) of a track, its instrument and each effect. Call before set_params or add_automation.",
-		schema({{"track", prop("integer", "track index (or give mixerChannel)")}, {"mixerChannel", prop("integer", "mixer channel index")}}), describeModelTree});
-	r.add({"add_automation", "Create an automation track with one clip driving a parameter through the given points. Ticks: 192 per bar in 4/4.",
-		schema({{"track", prop("integer", "track index (or give mixerChannel)")}, {"mixerChannel", prop("integer", "mixer channel index (target must be effect:N)")},
-			{"target", prop("string", "track | instrument | effect:N")}, {"model", prop("string", "parameter name from describe_model_tree")},
-			{"points", QJsonObject{{"type", "array"}, {"items", schema({{"pos", prop("integer", "ticks")}, {"value", prop("number", "parameter value")}}, {"pos", "value"})}}},
+	r.add({"describe_model_tree",
+		"WHAT: every automatable parameter (name, path, value, min, max, automated) of a track, its instrument and each effect, or of a mixer channel's effects. "
+		"WHEN: before set_params or add_automation on anything but track Volume/Panning. RETURNS {track, instrument, effects}. Gotcha: large for complex instruments; call once and remember.",
+		schema({{"track", trackOrMixer}, {"mixerChannel", mixerIndex}}), describeModelTree});
+	r.add({"add_automation",
+		"WHAT: new automation track with one clip driving a parameter through points over time. WHEN: filter sweeps, volume builds, fades; static values belong in set_params/set_track. "
+		"UNITS: pos in absolute ticks, value in the parameter's own range. RETURNS {automationTrack, model, points}. Gotcha: each call adds one automation track; put all points of one parameter in one call.",
+		schema({{"track", trackOrMixer}, {"mixerChannel", prop("integer", "mixer channel index (then target must be effect:N)")},
+			{"target", prop("string", "track | instrument | effect:N")}, {"model", prop("string", "parameter name from describe_model_tree, e.g. Volume, Cutoff frequency")},
+			{"points", QJsonObject{{"type", "array"}, {"items", schema({{"pos", prop("integer", "absolute ticks")}, {"value", prop("number", "parameter value")}}, {"pos", "value"})}}},
 			{"progression", prop("string", "discrete | linear (default) | cubic")}}, {"target", "model", "points"}), addAutomation});
-	r.add({"add_sample_clip", "Place an audio file as a clip on a sample track (a new one named after the file unless track is given). Returns the track index and clip length in ticks.",
-		schema({{"file", prop("string", "path to a wav/ogg/flac/aiff file")}, {"pos", prop("integer", "clip start in ticks")}, {"track", prop("integer", "existing sample track index")}}, {"file", "pos"}),
+	r.add({"add_sample_clip",
+		"WHAT: place an audio file (list_samples or a user path) as a clip on a sample track, creating a track named after the file unless track is given. WHEN: one-shots, loops, vocals. "
+		"UNITS: pos in absolute ticks. RETURNS {track, pos, len} (len in ticks at the current tempo). Gotcha: the clip plays at natural speed; tempo changes never stretch it.",
+		schema({{"file", prop("string", "path to a wav/ogg/flac/mp3/aiff file")}, {"pos", prop("integer", "clip start in absolute ticks")}, {"track", prop("integer", "existing sample track index")}}, {"file", "pos"}),
 		[pathAllowed = std::move(pathAllowed)](const QJsonObject& a) { return addSampleClip(a, pathAllowed); }});
 }
 
