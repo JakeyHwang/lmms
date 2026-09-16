@@ -179,14 +179,6 @@ static QJsonObject newProject(const QJsonObject& a)
 	return R::ok({{"tracks", int(song->tracks().size())}});
 }
 
-static QJsonObject undo(const QJsonObject&)
-{
-	auto journal = Engine::projectJournal();
-	if (!journal->canUndo()) { return R::error("Nothing to undo"); }
-	journal->undo();
-	return R::ok();
-}
-
 void registerAiActionTools(AiToolRegistry& r, PathAllowed pathAllowed)
 {
 	r.add({"play", "Start song playback, optionally from a bar (default: the current position).",
@@ -201,8 +193,6 @@ void registerAiActionTools(AiToolRegistry& r, PathAllowed pathAllowed)
 		[pathAllowed](const QJsonObject& a) { return save(a, pathAllowed); }});
 	r.add({"new_project", "Discard the current project and start a new one from the default template. Refused while the project has unsaved changes unless discardChanges is true.",
 		schema({{"discardChanges", prop("boolean", "true to throw away unsaved changes")}}), newProject});
-	r.add({"undo", "Undo the last journal checkpoint. Inside an AI turn the checkpoint is a whole-song snapshot taken before the turn, so this reverts everything the AI did this turn, not just the last tool call.",
-		schema({}), undo});
 }
 
 } // namespace lmms

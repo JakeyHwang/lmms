@@ -148,22 +148,6 @@ private slots:
 		QVERIFY(reg.call("new_project", {{"discardChanges", true}})["ok"].toBool());
 		QVERIFY(journal->isJournalling());
 	}
-	void undoWithEmptyJournalFails()
-	{
-		QVERIFY(!lmms::Engine::projectJournal()->canUndo());
-		auto r = reg.call("undo", {});
-		QVERIFY(!r["ok"].toBool());
-		QVERIFY(r["error"].toString().contains("Nothing to undo"));
-	}
-	void undoRevertsLastChange()
-	{
-		reg.call("set_head", {{"bpm", 100}});
-		reg.call("set_head", {{"bpm", 150}});
-		QCOMPARE(song()->getTempo(), lmms::bpm_t(150));
-		auto r = reg.call("undo", {});
-		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
-		QCOMPARE(song()->getTempo(), lmms::bpm_t(100));
-	}
 	void playStopToggle()
 	{
 		QVERIFY(!song()->isPlaying());

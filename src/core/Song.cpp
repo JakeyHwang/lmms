@@ -1214,9 +1214,21 @@ void Song::loadProject( const QString & fileName )
 // only save current song as filename and do nothing else
 bool Song::saveProjectFile(const QString & filename, bool withResources)
 {
+	DataFile dataFile( DataFile::Type::SongProject );
+	saveProjectData(dataFile);
+	return dataFile.writeFile(filename, withResources);
+}
+
+
+
+
+void Song::saveProjectData(DataFile& dataFile)
+{
 	using gui::getGUI;
 
-	DataFile dataFile( DataFile::Type::SongProject );
+	// Serialising is a read, but some sub-objects flag the song modified along the way
+	// (e.g. MidiPort toggling its auto-assigned device); restore the flag afterwards.
+	const bool modified = m_modified;
 	m_savingProject = true;
 
 	m_tempoModel.saveSettings( dataFile, dataFile.head(), "bpm" );
@@ -1242,8 +1254,7 @@ bool Song::saveProjectFile(const QString & filename, bool withResources)
 	saveKeymapStates(dataFile, dataFile.content());
 
 	m_savingProject = false;
-
-	return dataFile.writeFile(filename, withResources);
+	setModified(modified);
 }
 
 

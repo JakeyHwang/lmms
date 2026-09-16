@@ -24,11 +24,15 @@
 
 #include "AiSession.h"
 #include "AiToolRegistry.h"
+#include "Engine.h"
+#include "Song.h"
+#include "Track.h"
 
 #include <QtTest>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 
 class FakeAiClient : public lmms::AiClient
 {
@@ -95,11 +99,21 @@ class AiSessionTest : public QObject
 private slots:
 	void initTestCase()
 	{
+		lmms::Engine::init(true);
 		reg.add({"a", "", {}, [this](const QJsonObject&){ calls << "a"; return lmms::AiToolRegistry::ok(); }});
 		reg.add({"b", "", {}, [this](const QJsonObject&){ calls << "b"; return lmms::AiToolRegistry::ok({{"big", QString(200000, 'x')}}); }});
 		reg.add({"bad", "", {}, [this](const QJsonObject&){ calls << "bad"; return lmms::AiToolRegistry::error("no"); }});
 		reg.add({"stopper", "", {}, [this](const QJsonObject&){ calls << "stopper"; current->stop(); return lmms::AiToolRegistry::ok(); }});
+		reg.add({"mutate", "", {}, [this](const QJsonObject&){
+			calls << "mutate";
+			auto song = lmms::Engine::getSong();
+			song->setTempo(99);
+			lmms::Track::create(lmms::Track::Type::Instrument, song);
+			song->setModified();
+			return lmms::AiToolRegistry::ok();
+		}});
 	}
+	void cleanupTestCase() { lmms::Engine::destroy(); }
 	void init() { calls.clear(); }
 
 	void dispatchesToolsInOrderThenFinishes()
@@ -202,6 +216,70 @@ private slots:
 		QCOMPARE(fin[0][0].toString(), QString("hi"));
 		QCOMPARE(s.history().size(), 3);
 		QVERIFY(!s.history()[2].toObject().contains("tool_calls"));
+	}
+	void revertLastTurnRestoresProjectSnapshot()
+	{
+		QTemporaryDir dir;
+		auto song = lmms::Engine::getSong();
+		song->createNewProject(); // the only public way to an unmodified song
+		song->setProjectFileName(dir.path() + "/demo.mmp");
+		QVERIFY(!song->isModified());
+		const auto tracksBefore = song->tracks().size();
+		const auto tempoBefore = song->getTempo();
+		QVERIFY(tempoBefore != 99);
+
+		FakeAiClient c; lmms::AiSession s(&c, &reg); // real checkpoint hooks
+		QVERIFY(!s.canRevertLastTurn());
+		c.scripted << toolCallMsg({"mutate"}) << QJsonObject{{"role","assistant"},{"content","changed"}};
+		QSignalSpy fin(&s, &lmms::AiSession::turnFinished);
+		s.submit("go");
+		QVERIFY(fin.wait(2000));
+		QCOMPARE(song->tracks().size(), tracksBefore + 1);
+		QCOMPARE(song->getTempo(), lmms::bpm_t(99));
+		QVERIFY(song->isModified());
+		QVERIFY(s.canRevertLastTurn());
+
+		QSignalSpy status(&s, &lmms::AiSession::status);
+		QVERIFY(s.revertLastTurn());
+		QCOMPARE(song->tracks().size(), tracksBefore);
+		QCOMPARE(song->getTempo(), tempoBefore);
+		QCOMPARE(song->projectFileName(), dir.path() + "/demo.mmp");
+		QVERIFY(!song->isModified());
+		QVERIFY(!s.canRevertLastTurn());
+		QVERIFY(!s.revertLastTurn());
+		QCOMPARE(status.count(), 1);
+		QVERIFY(status[0][0].toString().contains("Reverted"));
+		QCOMPARE(QDir(dir.path()).entryList(QDir::Files).size(), 0); // temp snapshot file removed
+
+		// A project that was already modified before the turn stays modified after the revert.
+		song->setModified();
+		c.scripted.clear();
+		c.scripted << toolCallMsg({"mutate"}) << QJsonObject{{"role","assistant"},{"content","changed"}};
+		c.requests.clear();
+		s.submit("again");
+		QVERIFY(fin.wait(2000));
+		QVERIFY(s.revertLastTurn());
+		QCOMPARE(song->tracks().size(), tracksBefore);
+		QVERIFY(song->isModified());
+	}
+	void revertRefusedWhileBusyAndAfterToolLessTurn()
+	{
+		FakeAiClient c; lmms::AiSession s(&c, &reg);
+		c.scripted << toolCallMsg({"mutate"}) << QJsonObject{{"role","assistant"},{"content","done"}};
+		QSignalSpy fin(&s, &lmms::AiSession::turnFinished);
+		s.submit("go");
+		QVERIFY(s.busy());
+		QVERIFY(!s.canRevertLastTurn());
+		QVERIFY(!s.revertLastTurn());
+		QVERIFY(fin.wait(2000));
+		QVERIFY(s.canRevertLastTurn());
+		// a turn that ran no tool cannot have changed the project: nothing to revert
+		c.scripted.clear();
+		c.scripted << QJsonObject{{"role","assistant"},{"content","just talk"}};
+		c.requests.clear();
+		s.submit("again");
+		QVERIFY(fin.wait(2000));
+		QVERIFY(!s.canRevertLastTurn());
 	}
 };
 

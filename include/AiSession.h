@@ -25,6 +25,7 @@
 #ifndef LMMS_AI_SESSION_H
 #define LMMS_AI_SESSION_H
 
+#include <QByteArray>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
@@ -56,6 +57,12 @@ public:
 	bool busy() const;
 	const QJsonArray& history() const;
 
+	//! True once a turn that ran tools has finished and its pre-turn project snapshot is still held.
+	bool canRevertLastTurn() const;
+	//! Reloads the project from the pre-turn snapshot (also discards any edits made after the turn).
+	//! Refused while busy or without a snapshot; returns whether the project was reverted.
+	bool revertLastTurn();
+
 signals:
 	void assistantTextDelta(const QString& text);
 	void toolCallStarted(const QString& name, const QJsonObject& args);
@@ -65,7 +72,8 @@ signals:
 	void status(const QString& text);
 
 protected:
-	// One song-level journal checkpoint per user turn; virtual so tests can stub them.
+	// Snapshot the project before each user turn (with journalling off during the turn);
+	// virtual so tests without an engine can stub them.
 	virtual void beginTurnCheckpoint();
 	virtual void endTurnCheckpoint();
 
@@ -87,6 +95,9 @@ private:
 	int m_toolCalls = 0;
 	int m_consecutiveErrors = 0;
 	bool m_busy = false;
+	QByteArray m_snapshot;           // project XML taken before the current/last turn; empty when nothing to revert
+	QString m_snapshotFileName;
+	bool m_snapshotModified = false;
 };
 
 } // namespace lmms

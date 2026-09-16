@@ -24,9 +24,14 @@
 
 #include "AiSession.h"
 
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonDocument>
+#include <QTemporaryFile>
+#include <QTextStream>
 
 #include "AiToolRegistry.h"
+#include "DataFile.h"
 #include "Engine.h"
 #include "ProjectJournal.h"
 #include "Song.h"
@@ -57,6 +62,7 @@ void AiSession::clear()
 
 bool AiSession::busy() const { return m_busy; }
 const QJsonArray& AiSession::history() const { return m_history; }
+bool AiSession::canRevertLastTurn() const { return !m_busy && !m_snapshot.isEmpty(); }
 
 void AiSession::submit(const QString& userText)
 {
@@ -185,17 +191,52 @@ void AiSession::elideIfLarge()
 	}
 }
 
+// The project journal cannot restore a whole song (Song::restoreState tears tracks out from
+// under their views and never covers <head>), so a turn is reverted by reloading a full
+// project snapshot taken before it, through the same path as File > Open.
 void AiSession::beginTurnCheckpoint()
 {
-	if (!Engine::getSong()) { return; }
-	Engine::getSong()->addJournalCheckPoint();
+	m_snapshot.clear();
+	Song* song = Engine::getSong();
+	if (!song) { return; }
+	m_snapshotFileName = song->projectFileName();
+	m_snapshotModified = song->isModified();
+	DataFile df(DataFile::Type::SongProject);
+	song->saveProjectData(df);
+	QTextStream ts(&m_snapshot, QIODevice::WriteOnly);
+	df.write(ts);
+	ts.flush();
 	Engine::projectJournal()->setJournalling(false);
 }
 
 void AiSession::endTurnCheckpoint()
 {
+	if (m_toolCalls == 0) { m_snapshot.clear(); } // nothing could have changed; don't offer a pointless reload
 	if (!Engine::getSong()) { return; }
 	Engine::projectJournal()->setJournalling(true);
+}
+
+bool AiSession::revertLastTurn()
+{
+	Song* song = Engine::getSong();
+	if (!canRevertLastTurn() || !song) { return false; }
+	// Next to the project file so "local:" resource paths resolve; no .mmp suffix so the
+	// temporary file stays out of the recent-projects list.
+	const QString dir = m_snapshotFileName.isEmpty() ? QDir::tempPath() : QFileInfo(m_snapshotFileName).absolutePath();
+	QTemporaryFile tmp(dir + "/lmms-ai-turn-XXXXXX");
+	if (!tmp.open())
+	{
+		tmp.setFileTemplate(QDir::tempPath() + "/lmms-ai-turn-XXXXXX");
+		if (!tmp.open()) { return false; }
+	}
+	tmp.write(m_snapshot);
+	tmp.close(); // still auto-removed on destruction
+	song->loadProject(tmp.fileName()); // leaves the song unmodified
+	song->setProjectFileName(m_snapshotFileName);
+	if (m_snapshotModified) { song->setModified(); }
+	m_snapshot.clear();
+	emit status(tr("Reverted last AI turn"));
+	return true;
 }
 
 } // namespace lmms

@@ -47,7 +47,6 @@
 #include "GuiApplication.h"
 #include "MainWindow.h"
 #include "OpenAiClient.h"
-#include "ProjectJournal.h"
 #include "Song.h"
 #include "SubWindow.h"
 
@@ -100,14 +99,16 @@ AiChatView::AiChatView() :
 	m_input->installEventFilter(this);
 	m_sendStop = new QPushButton(tr("Send"));
 	m_newChat = new QPushButton(tr("New chat"));
-	m_undoTurn = new QPushButton(tr("Undo turn"));
+	m_revertTurn = new QPushButton(tr("Revert turn"));
+	m_revertTurn->setToolTip(tr("Restore the project to the state before the last AI turn "
+		"(also discards edits made after it)"));
 	connect(m_sendStop, &QPushButton::clicked, this, &AiChatView::sendOrStop);
 	connect(m_newChat, &QPushButton::clicked, this, &AiChatView::newChat);
-	connect(m_undoTurn, &QPushButton::clicked, this, &AiChatView::undoTurn);
+	connect(m_revertTurn, &QPushButton::clicked, this, &AiChatView::revertTurn);
 	auto buttonRow = new QHBoxLayout;
 	buttonRow->addWidget(m_sendStop);
 	buttonRow->addWidget(m_newChat);
-	buttonRow->addWidget(m_undoTurn);
+	buttonRow->addWidget(m_revertTurn);
 	buttonRow->addStretch();
 	chatLayout->addWidget(m_transcript, 1);
 	chatLayout->addWidget(m_status);
@@ -119,6 +120,7 @@ AiChatView::AiChatView() :
 	auto layout = new QVBoxLayout(this);
 	layout->addWidget(m_stack);
 	reloadConfig();
+	setBusyUi(false);
 
 	SubWindow* subWin = getGUI()->mainWindow()->addWindowedWidget(this);
 	setMinimumSize(420, 320);
@@ -165,7 +167,7 @@ void AiChatView::setBusyUi(bool busy)
 {
 	m_sendStop->setText(busy ? tr("Stop") : tr("Send"));
 	m_newChat->setEnabled(!busy);
-	m_undoTurn->setEnabled(!busy);
+	m_revertTurn->setEnabled(!busy && m_session->canRevertLastTurn());
 }
 
 void AiChatView::sendOrStop()
@@ -196,13 +198,9 @@ void AiChatView::newChat()
 	m_streaming.clear();
 }
 
-void AiChatView::undoTurn()
+void AiChatView::revertTurn()
 {
-	if (m_session->busy()) { return; }
-	auto journal = Engine::projectJournal();
-	if (!journal->canUndo()) { return; }
-	journal->undo();
-	m_status->setText(tr("Reverted last turn"));
+	if (m_session->revertLastTurn()) { setBusyUi(false); }
 }
 
 void AiChatView::onTextDelta(const QString& text)

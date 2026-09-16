@@ -47,6 +47,7 @@ class AutomationTrack;
 class Keymap;
 class MidiClip;
 class Scale;
+class DataFile;
 
 namespace gui
 {
@@ -251,11 +252,14 @@ public:
 	bool guiSaveProject();
 	bool guiSaveProjectAs(const QString & filename);
 	bool saveProjectFile(const QString & filename, bool withResources = false);
+	//! Serialises the whole project (head + content) into @p dataFile, exactly as saveProjectFile() would write it.
+	void saveProjectData(DataFile& dataFile);
 
 	const QString & projectFileName() const
 	{
 		return m_fileName;
 	}
+	void setProjectFileName(QString const & projectFileName);
 
 	bool isLoadingProject() const
 	{
@@ -399,8 +403,6 @@ private:
 	void processMetronome(size_t bufferOffset);
 
 	void setModified(bool value);
-
-	void setProjectFileName(QString const & projectFileName);
 
 	AutomationTrack * m_globalAutomationTrack;
 

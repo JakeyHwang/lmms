@@ -64,7 +64,7 @@ protected:
 private slots:
 	void sendOrStop();
 	void newChat();
-	void undoTurn();
+	void revertTurn();
 	void onTextDelta(const QString& text);
 	void onToolStarted(const QString& name, const QJsonObject& args);
 	void onToolFinished(const QString& name, const QJsonObject& result);
@@ -85,7 +85,7 @@ private:
 	QPlainTextEdit* m_input;
 	QPushButton* m_sendStop;
 	QPushButton* m_newChat;
-	QPushButton* m_undoTurn;
+	QPushButton* m_revertTurn;
 	QLabel* m_status;
 
 	// The registry's tool handlers capture m_policy by reference: keep the policy declared first.

@@ -44,7 +44,7 @@ LMMS_EXPORT void registerAiProjectTools(AiToolRegistry& r, std::function<bool(co
 
 //! Discovery tools: list instruments/effects/presets/samples, read a preset's XML (paths gated by `policy`).
 LMMS_EXPORT void registerAiDiscoveryTools(AiToolRegistry& r, AiPathPolicy& policy);
-//! Action tools: play, stop, render, save, new_project, undo. `pathAllowed`, when set, gates every
+//! Action tools: play, stop, render, save, new_project. `pathAllowed`, when set, gates every
 //! file path a tool would write (render, save); an unset callback allows everything. `render`
 //! blocks the calling thread until the export finishes.
 LMMS_EXPORT void registerAiActionTools(AiToolRegistry& r, std::function<bool(const QString&)> pathAllowed = {});
