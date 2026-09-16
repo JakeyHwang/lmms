@@ -142,7 +142,7 @@ static QJsonObject setHead(const QJsonObject& a)
 static QJsonObject addInstrumentTrack(const QJsonObject& a)
 {
 	const QString plugin = a["instrument"].toString();
-	if (plugin.isEmpty() || PluginFactory::instance()->pluginInfo(plugin.toUtf8().constData()).isNull())
+	if (!plugin.isEmpty() && PluginFactory::instance()->pluginInfo(plugin.toUtf8().constData()).isNull())
 	{
 		return R::error("Unknown instrument plugin: " + plugin + " (use list_instruments)");
 	}
@@ -154,7 +154,7 @@ static QJsonObject addInstrumentTrack(const QJsonObject& a)
 	// Track::create takes the audio-engine change lock itself; do not guard it.
 	auto track = dynamic_cast<InstrumentTrack*>(Track::create(Track::Type::Instrument, Engine::getSong()));
 	if (!track) { return R::error("Could not create instrument track"); }
-	if (!track->loadInstrument(plugin)) { return R::error("Failed to load instrument " + plugin); }
+	if (!plugin.isEmpty() && !track->loadInstrument(plugin)) { return R::error("Failed to load instrument " + plugin); }
 	// loadInstrument renames the track after the plugin, so apply the requested name afterwards.
 	if (a.contains("name")) { track->setName(a["name"].toString()); }
 	if (a.contains("mixerChannel")) { track->mixerChannelModel()->setValue(mixerChannel); }
@@ -207,6 +207,14 @@ static QJsonObject addNotes(const QJsonObject& a)
 // --- XML surface ---------------------------------------------------------------------------
 
 static constexpr int MaxXmlBytes = 64 * 1024;
+
+//! Error for a result fragment over MaxXmlBytes (UTF-8), or an empty string when it fits.
+static QString xmlTooLarge(const QString& what, const QString& xml)
+{
+	const auto bytes = xml.toUtf8().size();
+	if (bytes <= MaxXmlBytes) { return {}; }
+	return QString("%1 XML is %2 bytes (limit %3)").arg(what).arg(bytes).arg(MaxXmlBytes);
+}
 
 static QString elementToString(const QDomElement& e)
 {
@@ -300,9 +308,9 @@ static QJsonObject getTrackXml(const QJsonObject& a)
 	QDomElement root = doc.createElement("root");
 	doc.appendChild(root);
 	const QString xml = elementToString(track->saveState(doc, root));
-	if (xml.size() > MaxXmlBytes)
+	if (auto err = xmlTooLarge("Track", xml); !err.isEmpty())
 	{
-		return R::error(QString("Track XML is %1 bytes (limit %2); use get_project_summary and the convenience tools instead").arg(xml.size()).arg(MaxXmlBytes));
+		return R::error(err + "; use get_project_summary and the convenience tools instead");
 	}
 	return R::ok({{"index", a["index"].toInt()}, {"xml", xml}});
 }
@@ -315,6 +323,8 @@ static QJsonObject addTrackXml(const QJsonObject& a)
 	if (!parseFragment(a["xml"].toString(), "track", df, el, &err) || !creatableTrackType(el, &err)) { return R::error(err); }
 	// Track::create takes the audio-engine change lock itself; do not guard it.
 	if (!Track::create(el, Engine::getSong())) { return R::error("Track could not be created from XML"); }
+	// Automation clips in the fragment only recorded their target model ids; connect them now.
+	AutomationClip::resolveAllIDs();
 	return R::ok({{"index", int(Engine::getSong()->tracks().size()) - 1}});
 }
 
@@ -329,7 +339,11 @@ static QJsonObject replaceTrackXml(const QJsonObject& a)
 	if (!parseFragment(a["xml"].toString(), "track", df, el, &err) || !creatableTrackType(el, &err)) { return R::error(err); }
 	auto track = Track::create(el, Engine::getSong());
 	if (!track) { return R::error("Track could not be created from XML"); }
-	moveTrackTo(track, index);
+	AutomationClip::resolveAllIDs();
+	{
+		auto guard = Engine::audioEngine()->requestChangesGuard();
+		moveTrackTo(track, index);
+	}
 	deleteTrack(old);
 	return R::ok({{"index", index}});
 }
@@ -349,10 +363,7 @@ static QJsonObject getMixerXml(const QJsonObject&)
 	QDomElement root = doc.createElement("root");
 	doc.appendChild(root);
 	const QString xml = elementToString(Engine::mixer()->saveState(doc, root));
-	if (xml.size() > MaxXmlBytes)
-	{
-		return R::error(QString("Mixer XML is %1 bytes (limit %2)").arg(xml.size()).arg(MaxXmlBytes));
-	}
+	if (auto err = xmlTooLarge("Mixer", xml); !err.isEmpty()) { return R::error(err); }
 	return R::ok({{"xml", xml}});
 }
 
@@ -665,9 +676,9 @@ void registerAiProjectTools(AiToolRegistry& r, std::function<bool(const QString&
 	r.add({"set_head", "Set tempo (bpm), time signature, master volume/pitch. All fields optional.",
 		schema({{"bpm", prop("integer", "10..999")}, {"timesigNum", prop("integer", "")}, {"timesigDen", prop("integer", "")},
 			{"masterVol", prop("integer", "0..200")}, {"masterPitch", prop("integer", "-12..12 semitones")}}), setHead});
-	r.add({"add_instrument_track", "Create an instrument track with the given plugin (see list_instruments). Returns its index.",
-		schema({{"name", prop("string", "track name")}, {"instrument", prop("string", "plugin name, e.g. tripleoscillator, kicker, sf2player")},
-			{"mixerChannel", prop("integer", "mixer channel, 0 = master")}}, {"instrument"}), addInstrumentTrack});
+	r.add({"add_instrument_track", "Create an instrument track with the given plugin (see list_instruments); omit instrument for an empty track. Returns its index.",
+		schema({{"name", prop("string", "track name")}, {"instrument", prop("string", "plugin name, e.g. tripleoscillator, kicker, sf2player; omit for an empty track")},
+			{"mixerChannel", prop("integer", "mixer channel, 0 = master")}}), addInstrumentTrack});
 	r.add({"add_notes", "Add notes to a MIDI clip on an instrument track (creates the clip at clipPos if missing). Ticks: 192 per bar in 4/4, quarter=48, 16th=12. key is MIDI number (60 = C4).",
 		schema({{"track", prop("integer", "track index")}, {"clipPos", prop("integer", "clip start in ticks")},
 			{"notes", QJsonObject{{"type", "array"}, {"items", schema({{"pos", prop("integer", "ticks from clip start")}, {"len", prop("integer", "ticks")},
@@ -675,9 +686,9 @@ void registerAiProjectTools(AiToolRegistry& r, std::function<bool(const QString&
 			{"clear", prop("boolean", "remove existing notes first")}}, {"track", "clipPos", "notes"}), addNotes});
 	r.add({"get_track_xml", "Full <track> XML for one track (instrument settings, effects, clips, notes). Same format as .mmp files.",
 		schema({{"index", prop("integer", "track index")}}, {"index"}), getTrackXml});
-	r.add({"add_track", "Append a track from <track> XML (as returned by get_track_xml or built from a preset). Returns its index.",
+	r.add({"add_track", "Append a track from <track> XML (as returned by get_track_xml or built from a preset); current .mmp format only (no legacy upgrade). Returns its index.",
 		schema({{"xml", prop("string", "<track type=\"0\" name=\"...\">...</track>")}}, {"xml"}), addTrackXml});
-	r.add({"replace_track", "Replace the track at index with new <track> XML, keeping its position.",
+	r.add({"replace_track", "Replace the track at index with new <track> XML, keeping its position; current .mmp format only (no legacy upgrade). Automation on other tracks targeting the old track's models is dropped.",
 		schema({{"index", prop("integer", "track index")}, {"xml", prop("string", "<track ...>...</track>")}}, {"index", "xml"}), replaceTrackXml});
 	r.add({"remove_track", "Delete a track. Returns the remaining track count.", schema({{"index", prop("integer", "track index")}}, {"index"}), removeTrack});
 	r.add({"get_mixer_xml", "Mixer channels, names, volumes, sends and channel effect chains as <mixer> XML.", schema({}), getMixerXml});

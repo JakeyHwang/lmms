@@ -36,6 +36,7 @@
 #include "MidiClip.h"
 #include "Mixer.h"
 #include "PluginFactory.h"
+#include "ProjectJournal.h"
 #include "SampleClip.h"
 #include "SampleTrack.h"
 #include "Song.h"
@@ -73,11 +74,14 @@ class AiProjectToolsTest : public QObject
 		for (auto v : models) { if (v.toObject()["name"].toString() == name) { return v.toObject(); } }
 		return {};
 	}
-	//! Instrument track with no plugin loaded: enough for note/clip tools.
-	static int addBareInstrumentTrack()
+	//! Instrument track with no plugin loaded (add_instrument_track without `instrument`): enough for note/clip tools.
+	int addBareInstrumentTrack(const QString& name = {})
 	{
-		lmms::Track::create(lmms::Track::Type::Instrument, lmms::Engine::getSong());
-		return int(lmms::Engine::getSong()->tracks().size()) - 1;
+		QJsonObject args;
+		if (!name.isEmpty()) { args["name"] = name; }
+		auto r = reg.call("add_instrument_track", args);
+		if (!r["ok"].toBool()) { qFatal("add_instrument_track failed: %s", qPrintable(r["error"].toString())); }
+		return r["index"].toInt();
 	}
 
 private slots:
@@ -165,8 +169,7 @@ private slots:
 	// element itself is only exercised in-app.
 	void trackXmlRoundTrip()
 	{
-		int src = addBareInstrumentTrack();
-		lmms::Engine::getSong()->tracks()[src]->setName("Src");
+		int src = addBareInstrumentTrack("Src");
 		reg.call("add_notes", {{"track", src}, {"clipPos", 0}, {"notes", QJsonArray{QJsonObject{{"pos", 0}, {"len", 24}, {"key", 62}}}}});
 		auto x = reg.call("get_track_xml", {{"index", src}});
 		QVERIFY2(x["ok"].toBool(), qPrintable(x["error"].toString()));
@@ -212,9 +215,9 @@ private slots:
 	}
 	void replaceAndRemove()
 	{
-		lmms::Engine::getSong()->tracks()[addBareInstrumentTrack()]->setName("A");
-		lmms::Engine::getSong()->tracks()[addBareInstrumentTrack()]->setName("B");
-		lmms::Engine::getSong()->tracks()[addBareInstrumentTrack()]->setName("C");
+		addBareInstrumentTrack("A");
+		addBareInstrumentTrack("B");
+		addBareInstrumentTrack("C");
 		QString xml = reg.call("get_track_xml", {{"index", 0}})["xml"].toString().replace("name=\"A\"", "name=\"A2\"");
 		auto r = reg.call("replace_track", {{"index", 0}, {"xml", xml}});
 		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
@@ -270,6 +273,41 @@ private slots:
 		QVERIFY(!reg.call("set_mixer_xml", {{"xml", "<mixer><mixerchannel num=\"1\" name=\"x\" foo=\"local:evil.dll\"/></mixer>"}})["ok"].toBool());
 		QCOMPARE(int(mixer->numChannels()), 2);
 		QCOMPARE(mixer->mixerChannel(1)->m_name, QString("Bus"));
+	}
+	void addTrackResolvesAutomationIds()
+	{
+		int idx = addBareInstrumentTrack("Target");
+		auto target = dynamic_cast<lmms::InstrumentTrack*>(lmms::Engine::getSong()->tracks()[idx]);
+		QVERIFY(target);
+		QVERIFY(!target->volumeModel()->isAutomated());
+		// Automation-track XML as get_track_xml would return it, targeting the existing track's volume model.
+		QString xml = QString(
+			"<track type=\"5\" name=\"Auto\" muted=\"0\" solo=\"0\"><automationtrack/>"
+			"<automationclip pos=\"0\" len=\"192\" name=\"Vol\" prog=\"1\" tens=\"0\" mute=\"0\">"
+			"<time pos=\"0\" value=\"0\" outValue=\"0\" inTan=\"0\" outTan=\"0\" lockedTan=\"0\"/>"
+			"<time pos=\"192\" value=\"100\" outValue=\"100\" inTan=\"0\" outTan=\"0\" lockedTan=\"0\"/>"
+			"<object id=\"%1\"/></automationclip></track>").arg(lmms::ProjectJournal::idToSave(target->volumeModel()->id()));
+		auto r = reg.call("add_track", {{"xml", xml}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		auto at = lmms::Engine::getSong()->tracks()[r["index"].toInt()];
+		QCOMPARE(at->type(), lmms::Track::Type::Automation);
+		QCOMPARE(int(at->getClips().size()), 1);
+		auto clip = dynamic_cast<lmms::AutomationClip*>(at->getClips()[0]);
+		QVERIFY(clip);
+		QCOMPARE(int(clip->objects().size()), 1);
+		QCOMPARE(clip->firstObject(), target->volumeModel());
+		QVERIFY(target->volumeModel()->isAutomated());
+		QCOMPARE(clip->valueAt(96), 50.0f);
+
+		// replace_track goes through the same path.
+		auto r2 = reg.call("replace_track", {{"index", r["index"].toInt()}, {"xml", xml.replace("name=\"Auto\"", "name=\"Auto2\"")}});
+		QVERIFY2(r2["ok"].toBool(), qPrintable(r2["error"].toString()));
+		auto at2 = lmms::Engine::getSong()->tracks()[r["index"].toInt()];
+		QCOMPARE(at2->name(), QString("Auto2"));
+		auto clip2 = dynamic_cast<lmms::AutomationClip*>(at2->getClips()[0]);
+		QVERIFY(clip2);
+		QCOMPARE(clip2->firstObject(), target->volumeModel());
+		QVERIFY(target->volumeModel()->isAutomated());
 	}
 
 	// --- Task 7: effects, params, automation, samples ---
