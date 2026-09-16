@@ -326,6 +326,40 @@ private slots:
 		QCOMPARE(vol["min"].toDouble(), 0.0);
 		QCOMPARE(vol["max"].toDouble(), 200.0);
 		QVERIFY(!modelNamed(d["track"].toArray(), "Panning").isEmpty());
+		QCOMPARE(vol["path"].toString(), QString("Volume"));
+		QCOMPARE(vol["automated"].toBool(), false);
+		// Sound shaping, arpeggio and chords sit one level down; the three envelope "attacks" are
+		// told apart by their path, and a clip's own mute switch is not a track parameter.
+		auto cutoff = modelNamed(d["track"].toArray(), "Cutoff frequency");
+		QCOMPARE(cutoff["value"].toDouble(), 14000.0);
+		QCOMPARE(cutoff["path"].toString(), QString("Envelopes/LFOs>Cutoff frequency"));
+		QVERIFY(!modelNamed(d["track"].toArray(), "Arpeggio range").isEmpty());
+		QVERIFY(!modelNamed(d["track"].toArray(), "Chord range").isEmpty());
+		int attacks = 0, mutes = 0;
+		for (auto v : d["track"].toArray())
+		{
+			attacks += v.toObject()["name"].toString() == "Env attack";
+			mutes += v.toObject()["name"].toString() == "Mute";
+		}
+		QCOMPARE(attacks, 3);
+		QCOMPARE(mutes, 1);
+		reg.call("add_notes", {{"track", idx}, {"clipPos", 0}, {"notes", QJsonArray{QJsonObject{{"pos", 0}, {"len", 48}, {"key", 60}}}}});
+		QCOMPARE(reg.call("describe_model_tree", {{"track", idx}})["track"].toArray().size(), d["track"].toArray().size());
+
+		auto nested = reg.call("set_params", {{"track", idx}, {"target", "track"},
+			{"params", QJsonObject{{"Cutoff frequency", 2000}, {"Cutoff frequency>Env attack", 0.5}, {"Envelopes/LFOs>Volume>Env attack", 0.25}}}});
+		QVERIFY2(nested["ok"].toBool(), qPrintable(nested["error"].toString()));
+		auto models = reg.call("describe_model_tree", {{"track", idx}})["track"].toArray();
+		QCOMPARE(modelNamed(models, "Cutoff frequency")["value"].toDouble(), 2000.0);
+		QJsonObject cutoffAttack, volumeAttack;
+		for (auto v : models)
+		{
+			if (v.toObject()["path"].toString() == "Envelopes/LFOs>Cutoff frequency>Env attack") { cutoffAttack = v.toObject(); }
+			if (v.toObject()["path"].toString() == "Envelopes/LFOs>Volume>Env attack") { volumeAttack = v.toObject(); }
+		}
+		QCOMPARE(cutoffAttack["value"].toDouble(), 0.5);
+		QCOMPARE(volumeAttack["value"].toDouble(), 0.25);
+		QCOMPARE(modelNamed(models, "Volume")["value"].toDouble(), 100.0); // "Volume>Env attack" did not touch the track volume
 
 		auto p = reg.call("set_params", {{"track", idx}, {"target", "track"}, {"params", QJsonObject{{"volume", 42}, {"Panning", -30}}}});
 		QVERIFY2(p["ok"].toBool(), qPrintable(p["error"].toString()));
@@ -406,6 +440,7 @@ private slots:
 		QCOMPARE(clip->valueAt(0), 0.0f);
 		QCOMPARE(clip->valueAt(96), 50.0f);
 		QCOMPARE(clip->valueAt(192), 100.0f);
+		QVERIFY(modelNamed(reg.call("describe_model_tree", {{"track", idx}})["track"].toArray(), "Volume")["automated"].toBool());
 
 		// Discrete holds the previous point; points may come in any order.
 		auto r2 = reg.call("add_automation", {{"track", idx}, {"target", "track"}, {"model", "panning"},
@@ -433,6 +468,15 @@ private slots:
 		QVERIFY(dir.isValid());
 		const QString file = writeTestWav(dir);
 		QVERIFY(!file.isEmpty());
+
+		// An existing but undecodable file is reported, not shown in a message box.
+		QFile junk(dir.path() + "/junk.wav");
+		QVERIFY(junk.open(QIODevice::WriteOnly) && junk.write("not audio at all") > 0);
+		junk.close();
+		auto bad = reg.call("add_sample_clip", {{"file", junk.fileName()}, {"pos", 0}});
+		QVERIFY(!bad["ok"].toBool());
+		QVERIFY(bad["error"].toString().contains("decode"));
+		QCOMPARE(int(lmms::Engine::getSong()->tracks().size()), 0);
 
 		// The optional path policy is consulted before anything is touched.
 		lmms::AiToolRegistry denied;

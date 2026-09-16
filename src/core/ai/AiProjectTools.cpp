@@ -25,6 +25,7 @@
 #include "AiTools.h"
 
 #include <functional>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -50,10 +51,12 @@
 #include "Mixer.h"
 #include "MixerView.h"
 #include "Note.h"
+#include "PathUtil.h"
 #include "PatternStore.h"
 #include "PluginFactory.h"
 #include "SampleBuffer.h"
 #include "SampleClip.h"
+#include "SampleDecoder.h"
 #include "SampleTrack.h"
 #include "SongEditor.h"
 #include "TimePos.h"
@@ -470,27 +473,60 @@ static Model* resolveTarget(const ModelScope& scope, const QString& target, QStr
 	return nullptr;
 }
 
-//! Automatable models under `root`. A track lists only its own (volume, panning, pitch, ...):
-//! its instrument is a child too but is a separate target. Plugins are searched recursively
-//! because their parameters usually sit in a controls sub-model.
-static QList<AutomatableModel*> modelsOf(Model* root)
+//! An automatable model and its "Parent>Name" path below the root it was listed under.
+struct NamedModel
 {
-	return root->findChildren<AutomatableModel*>(dynamic_cast<Track*>(root) ? Qt::FindDirectChildrenOnly : Qt::FindChildrenRecursively);
+	AutomatableModel* model;
+	QString path;
+};
+
+static QString pathUnder(Model* root, AutomatableModel* m)
+{
+	const QString prefix = root->fullDisplayName();
+	const QString full = m->fullDisplayName();
+	return !prefix.isEmpty() && full.startsWith(prefix + ">") ? full.mid(prefix.size() + 1) : full;
 }
 
-//! Model called `name` under `root`: displayName match first (case-insensitive), then a
-//! "Parent>Name" suffix of fullDisplayName so nested parameters can be disambiguated.
+//! Automatable models under `root`. Plugins are searched whole (parameters usually sit in a
+//! controls sub-model). A track lists its own models first, then those of its sub-models
+//! (envelopes/LFOs, filter, arpeggio, chords, MIDI port); its instrument is a separate target
+//! and each clip carries its own mute switch, so both subtrees are left out.
+static std::vector<NamedModel> modelsOf(Model* root)
+{
+	std::vector<NamedModel> out;
+	auto add = [&](AutomatableModel* m) { out.push_back({m, pathUnder(root, m)}); };
+	if (!dynamic_cast<Track*>(root))
+	{
+		for (auto m : root->findChildren<AutomatableModel*>()) { add(m); }
+		return out;
+	}
+	QList<QObject*> nested;
+	for (auto child : root->children())
+	{
+		if (dynamic_cast<Instrument*>(child) || dynamic_cast<Clip*>(child)) { continue; }
+		if (auto m = dynamic_cast<AutomatableModel*>(child)) { add(m); }
+		else { nested.append(child); }
+	}
+	for (auto child : nested)
+	{
+		for (auto m : child->findChildren<AutomatableModel*>()) { add(m); }
+	}
+	return out;
+}
+
+//! Model called `name` under `root`: displayName match first (case-insensitive), then the path
+//! or a "Parent>Name" suffix of it, so duplicates such as the envelope attacks can be told apart.
 static AutomatableModel* findModel(Model* root, const QString& name)
 {
 	if (name.isEmpty()) { return nullptr; }
 	const auto models = modelsOf(root);
-	for (auto m : models)
+	for (auto& [m, path] : models)
 	{
 		if (m->displayName().compare(name, Qt::CaseInsensitive) == 0) { return m; }
 	}
-	for (auto m : models)
+	for (auto& [m, path] : models)
 	{
-		if (m->fullDisplayName().endsWith(">" + name, Qt::CaseInsensitive)) { return m; }
+		if (path.compare(name, Qt::CaseInsensitive) == 0 || path.endsWith(">" + name, Qt::CaseInsensitive)) { return m; }
 	}
 	return nullptr;
 }
@@ -499,11 +535,11 @@ static QJsonArray describeModels(Model* root)
 {
 	QJsonArray out;
 	if (!root) { return out; }
-	for (auto m : modelsOf(root))
+	for (auto& [m, path] : modelsOf(root))
 	{
 		if (m->displayName().isEmpty()) { continue; }
-		out.append(QJsonObject{{"name", m->displayName()}, {"value", double(m->value<float>())},
-			{"min", double(m->minValue<float>())}, {"max", double(m->maxValue<float>())}});
+		out.append(QJsonObject{{"name", m->displayName()}, {"path", path}, {"value", double(m->value<float>())},
+			{"min", double(m->minValue<float>())}, {"max", double(m->maxValue<float>())}, {"automated", m->isAutomated()}});
 	}
 	return out;
 }
@@ -630,8 +666,8 @@ static QJsonObject addAutomation(const QJsonObject& a)
 	for (auto v : points)
 	{
 		auto p = v.toObject();
-		// Unquantised, and keep neighbouring nodes: every given point must survive verbatim.
-		clip->putValue(TimePos(p["pos"].toInt()), float(p["value"].toDouble()), false, true);
+		// Unquantised; the default ignoreSurroundingPoints=true keeps every given point verbatim.
+		clip->putValue(TimePos(p["pos"].toInt()), float(p["value"].toDouble()), false);
 	}
 	return R::ok({{"automationTrack", int(Engine::getSong()->tracks().size()) - 1}, {"model", model->displayName()}, {"points", points.size()}});
 }
@@ -643,9 +679,11 @@ static QJsonObject addSampleClip(const QJsonObject& a, const std::function<bool(
 	if (file.isEmpty() || !QFileInfo(file).isFile()) { return R::error("File not found: " + file); }
 	const int pos = a["pos"].toInt(0);
 	if (pos < 0) { return R::error("pos must be >= 0 ticks"); }
-	// Decode before touching the project, so an unreadable file changes nothing.
-	auto buffer = SampleBuffer::fromFile(file);
-	if (buffer->empty()) { return R::error("Could not decode audio file: " + file); }
+	// Decode before touching the project, so an unreadable file changes nothing. (SampleBuffer::fromFile
+	// would pop up a message box in-app instead of reporting the failure.)
+	auto decoded = SampleDecoder::decode(PathUtil::toAbsolute(file));
+	if (!decoded || decoded->data.empty()) { return R::error("Could not decode audio file: " + file); }
+	auto buffer = std::make_shared<SampleBuffer>(std::move(decoded->data), decoded->sampleRate, PathUtil::toShortestRelative(file));
 	SampleTrack* track = nullptr;
 	QString err;
 	if (a.contains("track"))
