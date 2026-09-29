@@ -29,6 +29,7 @@
 #include "AiToolRegistry.h"
 #include "AiTools.h"
 #include "Engine.h"
+#include "PluginFactory.h"
 #include "ProjectJournal.h"
 #include "Song.h"
 
@@ -188,6 +189,30 @@ private slots:
 		QVERIFY(isDir["error"].toString().contains("directory"));
 		QVERIFY(!QFileInfo::exists(allowed.path() + ".wav"));
 		QVERIFY(!song()->isExporting());
+	}
+	void exportMidiRejectsBadPaths()
+	{
+		const QString evil = forbidden.path() + "/evil";
+		QVERIFY(!reg.call("export_midi", {{"path", evil}})["ok"].toBool());
+		QVERIFY(!QFileInfo::exists(evil + ".mid"));
+		QVERIFY(!reg.call("export_midi", {})["ok"].toBool());
+		auto missingDir = reg.call("export_midi", {{"path", allowed.path() + "/nodir/song"}});
+		QVERIFY(!missingDir["ok"].toBool());
+		QVERIFY(missingDir["error"].toString().contains("directory"));
+	}
+	void exportMidiWritesFile()
+	{
+		if (lmms::PluginFactory::instance()->pluginInfo("midiexport").isNull()) { QSKIP("midiexport plugin not loadable in this test process"); }
+		auto t = reg.call("add_instrument_track", {{"name", "Lead"}});
+		reg.call("add_notes", {{"track", t["index"].toInt()}, {"clipPos", 0},
+			{"notes", QJsonArray{QJsonObject{{"pos", 0}, {"len", 48}, {"key", 60}}}}});
+		auto r = reg.call("export_midi", {{"path", allowed.path() + "/song"}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		const QString mid = allowed.path() + "/song.mid";
+		QCOMPARE(r["path"].toString(), mid);
+		QFile f(mid);
+		QVERIFY(f.open(QIODevice::ReadOnly));
+		QCOMPARE(f.read(4), QByteArray("MThd"));
 	}
 	void renderWritesWav()
 	{

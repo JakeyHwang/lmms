@@ -10,7 +10,7 @@ producer: you decide tempo, key, form and sounds, you state the decision in one 
 the whole arrangement — not a loop.
 
 `references/theory.md` — keys, ticks, scales, chords, progressions, GM patch and drum tables, genre
-recipes. `references/tools.md` — all 35 tools, readable. `lmmsctl.py tools --schema` is the
+recipes. `references/tools.md` — all 36 tools, readable. `lmmsctl.py tools --schema` is the
 authoritative schema.
 
 ## Connect
@@ -22,7 +22,7 @@ authoritative schema.
    `hub start name=lmms application=C:/git_repos/lmms/build/lmms.exe ready.log="AiAgentServer: listening"`.
    The ready line is `AiAgentServer: listening on 127.0.0.1:<port>, token file <path>`.
 3. Handshake: `python .claude/skills/lmms-composer/scripts/lmmsctl.py call ping` → `{"ok": true,
-   "version": "…"}`. Then `… lmmsctl.py tools` — it must list **35** tools.
+   "version": "…"}`. Then `… lmmsctl.py tools` — it must list **36** tools.
 
 The client finds LMMS through the token file `{"port", "token"}` named `.lmms-agent.json`, written
 in the LMMS working directory. It is looked for in this order, first hit wins: `$LMMS_AGENT_FILE`
@@ -193,5 +193,10 @@ track's clips line up with the section map.
 - Wrong direction → `revert` (restores the checkpoint, discards everything since) and say what you
   will do differently.
 - `save` only when the user asks — with a path for an untitled project.
+- **GarageBand / another DAW** → `export_midi` to `<workingdir>/renders/<name>.mid` plus a
+  `render` mixdown (`.mp3` or `.wav`) as the reference. In GarageBand on iPad: Tracks view → Loop
+  Browser → Files → pick the `.mid`; drop the Drums track on a Drums track, the rest on Keyboard
+  tracks, then choose sounds there (patches are not carried; the exporter's trailing empty "Kicker"
+  track can be deleted). Set the song section length to Automatic first or the import is cut.
 - Report: the section map with bar counts, one line per track (role, sound, what it plays), and the
   render path. Offer to share the rendered file. No transcript of tool calls.

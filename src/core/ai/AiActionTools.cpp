@@ -31,6 +31,10 @@
 #include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
+#include <memory>
+
+#include "ExportFilter.h"
+#include "PatternStore.h"
 
 #include "AiToolHelpers.h"
 #include "AudioEngine.h"
@@ -162,6 +166,28 @@ static QJsonObject save(const QJsonObject& a, const PathAllowed& pathAllowed)
 	return R::ok({{"path", song->projectFileName()}});
 }
 
+//! Standard MIDI file through the midiexport plugin (File > Export MIDI). Song::exportProjectMidi
+//! swallows failures, so the plugin is driven here directly to report them.
+static QJsonObject exportMidi(const QJsonObject& a, const PathAllowed& pathAllowed)
+{
+	auto song = Engine::getSong();
+	if (song->isExporting()) { return R::error("Cannot export while rendering"); }
+	const QString given = a["path"].toString();
+	if (given.isEmpty()) { return R::error("path is required"); }
+	QString path = given;
+	if (!path.endsWith(".mid", Qt::CaseInsensitive)) { path += ".mid"; }
+	if (const QString err = outputPathError(given, path); !err.isEmpty()) { return R::error(err); }
+	if (pathAllowed && !pathAllowed(path)) { return R::error("Path not allowed: " + path); }
+	std::unique_ptr<Plugin> plugin(Plugin::instantiate("midiexport", nullptr, nullptr));
+	auto filter = dynamic_cast<ExportFilter*>(plugin.get());
+	if (!filter) { return R::error("midiexport plugin is not available in this build"); }
+	if (!filter->tryExport(song->tracks(), Engine::patternStore()->tracks(), song->getTempo(), song->masterPitch(), path))
+	{
+		return R::error("MIDI export failed: " + path);
+	}
+	return R::ok({{"path", path}, {"bytes", QFileInfo(path).size()}});
+}
+
 static QJsonObject newProject(const QJsonObject& a)
 {
 	auto song = Engine::getSong();
@@ -199,6 +225,12 @@ void registerAiActionTools(AiToolRegistry& r, PathAllowed pathAllowed)
 		"RETURNS {path}. Gotcha: an untitled project needs a path; the folder must exist.",
 		schema({{"path", prop("string", "output path; .mmp is appended when missing")}}),
 		[pathAllowed](const QJsonObject& a) { return save(a, pathAllowed); }});
+	r.add({"export_midi",
+		"WHAT: write the song as a Standard MIDI File (one MIDI track per instrument track, notes and tempo; no audio, effects or sample tracks). "
+		"WHEN: the user wants to open the arrangement in another DAW or GarageBand as editable notes. RETURNS {path, bytes}. "
+		"Gotcha: instrument sounds are not carried over; the receiving app assigns its own. Pair it with render for a reference mix.",
+		schema({{"path", prop("string", "output path; .mid is appended when missing")}}, {"path"}),
+		[pathAllowed](const QJsonObject& a) { return exportMidi(a, pathAllowed); }});
 	r.add({"new_project",
 		"WHAT: discard the current project and load the default template (one TripleOscillator, sample, pattern and automation track). WHEN: the user wants to start over; otherwise build in the open project. "
 		"RETURNS {tracks}. Gotcha: refused while there are unsaved changes unless discardChanges:true; the default tracks are empty, so remove or reuse them.",

@@ -1,7 +1,7 @@
 # Tool reference
 
 `python scripts/lmmsctl.py tools --schema` prints the **authoritative** JSON schema straight from the
-running LMMS. This file is the readable companion: 35 tools, what each is for, its arguments, what it
+running LMMS. This file is the readable companion: 36 tools, what each is for, its arguments, what it
 returns, and the mistake that bites.
 
 Every result is an object with `ok`. `Lmms.call()` hands it back as-is; `Lmms.ok()` raises
@@ -26,7 +26,7 @@ Every tool with its JSON schema, in OpenAI function format. `lmmsctl.py tools` w
 
 - **Args:** none.
 - **Returns:** `{ok, tools: [{type, function: {name, description, parameters}}]}`.
-- **Gotcha:** the count is the ground truth for whether the build has all 35 tools.
+- **Gotcha:** the count is the ground truth for whether the build has all 36 tools.
 
 ### checkpoint
 
@@ -358,6 +358,18 @@ Save the project as `.mmp`; omit `path` to overwrite the current project file.
 - **Returns:** `{path}`.
 - **Gotcha:** an untitled project needs a path, and the folder must exist. Only save when the user
   asks.
+
+### export_midi
+
+Write the song as a Standard MIDI File (format 1): one MIDI track per instrument track, notes and
+tempo only. For GarageBand, Logic, or any DAW that should get editable notes.
+
+- **Args:** `path` (string, **required**) — output path; `.mid` is appended when missing.
+- **Returns:** `{path, bytes}`.
+- **Gotcha:** instrument sounds, effects and sample tracks are not carried — the receiving app
+  assigns its own; pair it with `render` for a reference mix. LMMS's exporter appends one empty
+  track from the pattern store ("Kicker"); the importer can delete it. Drum tracks use GM drum keys,
+  so put them on a Drums track in the target app.
 
 ### new_project
 
