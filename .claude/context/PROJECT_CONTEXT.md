@@ -3,17 +3,19 @@
 Agent-facing repo state. Derived: regenerated wholesale each context sync, 300-line budget. Nothing
 here is authoritative — durable decisions get promoted into `CLAUDE.md` or the governing spec.
 
-Synced at commit `805c31c5c` (2026-09-30), dispatched range
-`4e0f15a1c..805c31c5c` — **17 files changed, +20/−16**, all modified, none added or deleted.
+Synced at commit `daf34b47b` (2026-09-30), dispatched range
+`554d1d545..daf34b47b` — **4 files changed, +61/−34**, all modified, none added or deleted.
 Fork: `origin` → `JakeyHwang/lmms`, `upstream` → `lmms/lmms`. Branch: `ai-composer`.
 
-This range is the **harness fix wave** that follows the cutover: the governing spec's status line
-moved to `implemented` (`801be6760`), the last "AI Composer" comments across `include/`, `src/` and
-`tests/` were swept to "agent harness" (`08a07600a`, `805c31c5c`), `AiProjectSnapshot::restore()`
-gained a flush check, and the agent token file is now narrowed to owner-only after it is written.
+This range is a two-fix wave on the live harness. (1) The agent server no longer starts in the
+`GuiApplication` constructor: `GuiApplication::startAgentServer()` is a public method
+(`include/GuiApplication.h:95`) called from `src/core/main.cpp:915` once the initial project has
+been loaded or created, and it returns early if the server already exists or the setting is off.
+(2) `deleteTrack` in `src/core/ai/AiProjectTools.cpp:441-458` now deletes through
+`TrackContainerView::deleteTrackView` when a GUI is present, so the view dies before the model.
 No file was added, deleted or renamed, so no managed reference could go dead this range; the
 proactive path sweep re-resolved every path named in `CLAUDE.md` and in this file against the tree
-at `805c31c5c` and all of them still exist.
+at `daf34b47b` and all of them still exist.
 
 ## Entry points
 
@@ -26,7 +28,7 @@ at `805c31c5c` and all of them still exist.
 | GUI bootstrap | `src/gui/MainApplication.cpp` → `GuiApplication.cpp` → `MainWindow.cpp` |
 | Settings dialog | `MainWindow::showSettingsDialog()` (`include/MainWindow.h:156`, `src/gui/MainWindow.cpp:887`); page ids in the `ConfigTab` enum (`include/SetupDialog.h:55-63`, ending `AiSettings`) |
 | Subwindow panels | `MainWindow::addWindowedWidget` (`include/MainWindow.h:69`); example `src/gui/ControllerRackView.cpp:82` |
-| **Agent server** | `lmms::AiAgentServer` (`include/AiAgentServer.h`, `src/core/ai/AiAgentServer.cpp`), started by `GuiApplication::init` unless `ai/agentserver` is `"0"` — on by default, an absent key means enabled (`src/core/ai/AiConfig.cpp:32-39`, `src/gui/GuiApplication.cpp:201-232`) |
+| **Agent server** | `lmms::AiAgentServer` (`include/AiAgentServer.h`, `src/core/ai/AiAgentServer.cpp`), started by `GuiApplication::startAgentServer()` (`src/gui/GuiApplication.cpp:207-241`) **from `src/core/main.cpp:915`**, after the initial project exists — not from the constructor. Skipped when `ai/agentserver` is `"0"`; on by default, an absent key means enabled (`src/core/ai/AiConfig.cpp:32-39`) |
 | Agent client | `.claude/skills/lmms-composer/scripts/lmmsctl.py` (`tools`, `summary`, `call <tool>`) |
 | Tool tables | `registerAiProjectTools` / `…Discovery` / `…Action` / `…Meta` (`include/AiTools.h`) into one `AiToolRegistry` owned by `GuiApplication` |
 | Path safety | `lmms::AiPathPolicy` (`include/AiPathPolicy.h`) — roots only; `allowFromUserText` is gone |
@@ -91,7 +93,8 @@ cap at 64 KB (`MaxXmlBytes`, `src/core/ai/AiProjectTools.cpp:350`).
   then `build/tests/<Name>.exe -o <file>,txt` (the exes print nothing to the MSYS console).
 - Headless smoke: `lmms render tests/emptyproject.mmp`.
 - Live smoke: the agent server is on by default; start `build/lmms.exe`, wait for
-  `AiAgentServer: listening on 127.0.0.1:<port>`, then `lmmsctl.py tools` → 35.
+  `AiAgentServer: listening on 127.0.0.1:<port>` — which now appears **after** the project window
+  is up, not during the splash — then `lmmsctl.py tools` → 35.
 - Headless tests cannot load plugin DLLs in this build (plugins import from `lmms.exe`), so
   plugin-dependent tool cases `QSKIP`; those paths are proven only by the live smoke.
 - Last recorded full run: **13/13 C++ green, 13 Python green, headless render rc=0**, recorded by
@@ -101,6 +104,25 @@ cap at 64 KB (`MaxXmlBytes`, `src/core/ai/AiProjectTools.cpp:350`).
 
 ## Recent changes
 
+- 2026-09-30 — **agent server start moved out of the `GuiApplication` constructor**,
+  `554d1d545..daf34b47b`: `GuiApplication::startAgentServer()` (`include/GuiApplication.h:95`,
+  `src/gui/GuiApplication.cpp:207-241`) is now called from `src/core/main.cpp:915`, after the
+  recovery prompt and after `loadProject`/`createNewProject`. Re-entrant-safe (`m_agentServer`
+  early return). `CLAUDE.md` § `project-structure` and § `active-specs` re-stated; spec §6 gained
+  one bullet for the ordering.
+- 2026-09-30 — **`deleteTrack` deletes the view first when a GUI exists**
+  (`src/core/ai/AiProjectTools.cpp:441-458`): it finds the `TrackView` in the song editor and calls
+  `TrackContainerView::deleteTrackView`, falling back to `requestChangesGuard` + `delete track`
+  headless. The rule behind it was **promoted into `CLAUDE.md` § `code-layout`** ("with a GUI,
+  never `delete` a `Track` before its `TrackView`") — `~InstrumentTrackView` reaches through
+  `model()`, so model-first frees memory the view still reads.
+- 2026-09-30 — open question "the startup race is mitigated only by convention" **answered** and
+  deleted: the race is closed in code by the `main.cpp` call site, not by asking agents to call
+  `get_project_summary` first.
+- 2026-09-30 — line-anchor re-sweep for this range: `GuiApplication.cpp:229-231` → `:238-240`
+  (`aboutToQuit`), `:223-226` → `:232-235` (registration order); `AiAgentServer.cpp:47-50` and
+  `:75-77`, `AiProjectTools.cpp:350` (`MaxXmlBytes`) and `:428` (`moveTrackView`),
+  `DataFile.cpp:2041-2043` all re-verified **unshifted**.
 - 2026-09-30 — agent server is **on by default**, `2f7dbf314` (4 files): `AiConfig::agentServer`
   defaults `true` and `AiConfig::load` only overrides it when the `ai/agentserver` key is present,
   so an absent key means enabled and `"0"` disables (`src/core/ai/AiConfig.cpp:32-39`). Spec §4 and
@@ -117,29 +139,16 @@ cap at 64 KB (`MaxXmlBytes`, `src/core/ai/AiProjectTools.cpp:350`).
 - 2026-09-30 — plan `2026-09-29-agent-harness.md`: Task 11's own docs-sync box flipped to `[x]` by
   its author; the plan is now **59/59**. `CLAUDE.md` § `active-specs` re-stated from 58/59, and the
   token-file permission and snapshot-flush behaviours recorded there.
-- 2026-09-30 — line-anchor sweep after the two insertions this range: `AiAgentServer.cpp:47-50`
-  (token path) and `DataFile.cpp:2041-2043` re-verified unshifted; new anchor
-  `AiAgentServer.cpp:75-77` added for the permission call.
 - 2026-09-30 — agent-harness cutover landed, `a929195ee..c5bb4e5a9` (20 commits). Deleted the
   in-app LLM path (`OpenAiClient`, `OpenAiStreamParser`, `AiClient.h`, `AiSession`,
   `AiPromptBuilder`, `AiChatView`, `data/ai/`, `ai_mock_server.py`, 4 tests); added
   `AiAgentServer`, `AiProjectSnapshot`, `AiMetaTools`, `AiAgentServerTest` and the
   `.claude/skills/lmms-composer/` skill. 29 tools → 35; 16 tests → 13.
-- 2026-09-30 — `CLAUDE.md` all four auto blocks rewritten: `src/gui/ai`, `data/ai`,
-  `ai_mock_server.py`, the 8-test AI count, `OpenAi*`/`AiSession`/`AiPromptBuilder`/`AiChatView`
-  and the `Ctrl+Alt+A` binding are gone from every block; the wire protocol, the 35-tool list, the
-  snapshot/checkpoint model and the dev-build token-file rule are in.
 - 2026-09-30 — pruned refs to `src/gui/ai/AiChatView.cpp`, `include/AiChatView.h`,
   `include/AiClient.h`, `include/AiSession.h`, `include/AiPromptBuilder.h`,
   `include/OpenAiClient.h`, `include/OpenAiStreamParser.h`, `data/ai/system_prompt.md`,
   `data/ai/CMakeLists.txt`, `tests/scripted/ai_mock_server.py` and the four deleted AI tests
-  (all deleted this range) from `CLAUDE.md` § `project-structure`, § `build-and-test`,
-  § `code-layout`, § `active-specs`.
-- 2026-09-30 — re-anchored stale line references: `MaxXmlBytes` `AiProjectTools.cpp:308` → `:350`,
-  `moveTrackView` `:386` → `:428`, `Ctrl+Alt+S` `MainWindow.cpp:302` → `:300-301`, panel toggles
-  `:432-458` → `:431-458`.
-- 2026-09-30 — plan `2026-09-29-agent-harness.md`: **58 step boxes flipped to `[x]`** on commit,
-  file and controller-ledger evidence. No task text altered.
+  (all deleted in the cutover range) from all four `CLAUDE.md` auto blocks.
 
 ## Open questions
 
@@ -158,11 +167,12 @@ cap at 64 KB (`MaxXmlBytes`, `src/core/ai/AiProjectTools.cpp:350`).
    in any upstream-facing diff.
 4. **Below floor, recorded.** Deferred minors from the task reviews live in
    `.superpowers/sdd/2026-09-29-agent-harness/progress.md:25-50` and are not repeated here.
-   `GuiApplication.h:118-121` declares the registry before the server it is passed to (benign: the
-   server is a QObject child that is never deleted). The startup race — the server accepts before
-   `main.cpp` finishes `loadProject` — is mitigated only by convention (call `get_project_summary`
-   first). `AiAgentServerTest.cpp:179`'s nested-loop case was re-armed via `QTimer::singleShot` in
-   `8c24c6a94` and mutation-verified, so it is no longer vacuous.
+   `GuiApplication.h:121-124` declares the registry before the server it is passed to (benign: the
+   server is a QObject child that is never deleted). `AiAgentServerTest.cpp:179`'s nested-loop case
+   was re-armed via `QTimer::singleShot` in `8c24c6a94` and mutation-verified, so it is no longer
+   vacuous. The startup race that used to sit in this list is closed in code as of `daf34b47b`.
+   No regression test covers either fix this range: `startAgentServer()` needs a GUI build and
+   `deleteTrack`'s GUI branch is exactly the path the headless tests `QSKIP`.
 
 ## Standing above-floor triggers
 

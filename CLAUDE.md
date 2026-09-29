@@ -34,11 +34,13 @@ Entry points:
 - Everything else compiles into the `lmmsobjs` OBJECT library (`src/CMakeLists.txt:104`), which both
   `lmms` and every test link against.
 - GUI bootstrap: `src/gui/MainApplication.cpp` → `GuiApplication.cpp` → `MainWindow.cpp`.
-- Agent entry: `GuiApplication` starts `AiAgentServer` unless `ai/agentserver` is `"0"` — on by
-  default, an absent key meaning enabled (`AiConfig::load`, `src/core/ai/AiConfig.cpp:32-39`;
-  `src/gui/GuiApplication.cpp:201-232`) — it registers all four tool tables into the
-  `AiToolRegistry` it owns and listens on `127.0.0.1`, ephemeral port. The external half is
-  `.claude/skills/lmms-composer/scripts/lmmsctl.py`; there is no in-app UI for it beyond the
+- Agent entry: `GuiApplication::startAgentServer()` (`src/gui/GuiApplication.cpp:207-241`), called
+  from `src/core/main.cpp:915` **after** the initial project is loaded or created — not from the
+  `GuiApplication` constructor, so an agent can never reach a song that does not exist yet. It is a
+  no-op when already running or when `ai/agentserver` is `"0"` — on by default, an absent key
+  meaning enabled (`AiConfig::load`, `src/core/ai/AiConfig.cpp:32-39`). It registers all four tool
+  tables into the `AiToolRegistry` it owns and listens on `127.0.0.1`, ephemeral port. The external
+  half is `.claude/skills/lmms-composer/scripts/lmmsctl.py`; there is no in-app UI for it beyond the
   settings checkbox.
 <!-- /claude:auto:project-structure -->
 
@@ -121,6 +123,16 @@ Entry points:
   is unbound.
 - Subwindow panels register through `MainWindow::addWindowedWidget` (`include/MainWindow.h:69`);
   `src/gui/ControllerRackView.cpp:82` is the reference example. Nothing in the harness uses it.
+- **With a GUI, never `delete` a `Track` before its `TrackView`.** `~InstrumentTrackView` reaches
+  back through `model()` to tear down the instrument window and the MIDI-port menus, and the view
+  is only closed by `destroyedTrack` and destroyed on the next event-loop pass — so deleting the
+  model first leaves the view reading freed memory. Delete through
+  `TrackContainerView::deleteTrackView` (`include/TrackContainerView.h:157`,
+  `src/gui/editors/TrackContainerView.cpp:287`), which does view-then-track under the audio-engine
+  change lock. Headless there is no view: `~Track` unlinks itself from the container and the caller
+  takes `requestChangesGuard` itself. `deleteTrack` in `src/core/ai/AiProjectTools.cpp:441-458` is
+  the reference for handling both, including the `sendPostedEvents()` needed because a view queued
+  by `trackAdded` may not exist yet.
 - **`include/*.h` is globbed at configure time** — `FILE(GLOB LMMS_INCLUDES …)`
   (`CMakeLists.txt:731`), compiled into `lmmsobjs` through `${LMMS_INCLUDES}`
   (`src/CMakeLists.txt:106`). A new header is invisible until CMake re-runs, and for a `Q_OBJECT`
@@ -171,11 +183,15 @@ still answers `result.ok=false`. Binds `127.0.0.1` only, ephemeral port. Port an
 are written to `ConfigManager::inst()->workingDir() + ".lmms-agent.json"`
 (`AiAgentServer::defaultTokenFilePath()`, `src/core/ai/AiAgentServer.cpp:47-50`) and the file is
 removed on `aboutToQuit` — `main.cpp` never deletes the `GuiApplication`, so the destructor would
-not run (`src/gui/GuiApplication.cpp:229-231`). The token file is also narrowed to
+not run (`src/gui/GuiApplication.cpp:238-240`). The token file is also narrowed to
 `ReadOwner | WriteOwner` right after it is written (`AiAgentServer::start`,
 `src/core/ai/AiAgentServer.cpp:75-77`) — best effort, unchecked, because on Windows Qt maps that
 onto the read-only attribute only. Handlers run on the GUI thread, one at a time, in
 arrival order; bytes arriving mid-handler are dispatched after it returns (`m_dispatching`).
+The server is started late on purpose: `GuiApplication::startAgentServer()` is called from
+`src/core/main.cpp:915`, after the recovery prompt and after `loadProject`/`createNewProject`, so
+the first request can never land while the song is being set up (the old constructor-time start
+let an agent remove tracks that project setup then deleted again).
 
 **35 registered tools**, across four tables: `add_automation`, `add_clips`, `add_effect`,
 `add_instrument_track`, `add_notes`, `add_sample_clip`, `add_sf2_track`, `add_track`, `checkpoint`,
@@ -184,7 +200,7 @@ arrival order; bytes arriving mid-handler are dispatched after it returns (`m_di
 `list_samples`, `list_tools`, `new_project`, `ping`, `play`, `remove_clip`, `remove_track`,
 `render`, `replace_track`, `revert`, `save`, `set_head`, `set_mixer_xml`, `set_params`, `set_track`,
 `stop`. Registration order is project (20), discovery (5), action (5), meta (5) —
-`src/gui/GuiApplication.cpp:223-226`. XML tool results cap at 64 KB (`MaxXmlBytes`,
+`src/gui/GuiApplication.cpp:232-235`. XML tool results cap at 64 KB (`MaxXmlBytes`,
 `src/core/ai/AiProjectTools.cpp:350`). `.claude/skills/lmms-composer/references/tools.md` documents
 all 35 in prose; `lmmsctl.py tools --schema` is the authoritative schema.
 

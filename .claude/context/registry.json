@@ -2,8 +2,8 @@
   "version": 1,
   "repo": "lmms",
   "bootstrappedAt": "2026-09-16",
-  "lastSyncedCommit": "805c31c5c",
-  "lastSyncedRange": "4e0f15a1c4e3fe5cc3d7cccdd7aea8c1d82d40b8..805c31c5cf3716c4d996c3932a6a7ef884452367",
+  "lastSyncedCommit": "daf34b47b",
+  "lastSyncedRange": "554d1d545e641384216ac9233d8e38d8c37b4872..daf34b47bca76b57f81c2dfbadb10fab27fae115",
   "fenceFormat": {
     "open": "<!-- claude:auto:<slug> -->",
     "close": "<!-- /claude:auto:<slug> -->"
@@ -100,6 +100,10 @@
     "Test-run and GUI evidence never appears in a diff: it lives in .superpowers/sdd/<run>/. Read-only for the steward. The harness run's ledger records 13/13 C++ tests, 13 Python tests, headless render rc=0 (progress.md:52) and the live smoke (progress.md:53).",
     "Verify a claimed checkbox flip against the file, never against a Recent-changes line - the 2026-09-16 sync once recorded 10 flips the file never held.",
     "Shortcut-availability checks must grep the editors' keyPressEvent switches, not just existing setShortcut calls: a MainWindow QAction has Qt::WindowShortcut context and pre-empts MDI children, and PianoRoll.cpp:1453 / SongEditor.cpp:511 test 'modifiers() & Qt::ControlModifier' non-exclusively. Ctrl+Alt+A is FREE again as of 635b0210b.",
-    "2026-09-30 path sweep: every file, directory and command path named in CLAUDE.md and PROJECT_CONTEXT.md resolves against the tree at c5bb4e5a9. Ten dead paths pruned (AiChatView.h/.cpp, AiClient.h, AiSession.h/.cpp, AiPromptBuilder.h/.cpp, OpenAiClient.h/.cpp, OpenAiStreamParser.h/.cpp, data/ai/*, ai_mock_server.py, the four deleted AI tests). src/core/ai/ now holds 10 entries; tests/CMakeLists.txt holds 13."
+    "2026-09-30 path sweep: every file, directory and command path named in CLAUDE.md and PROJECT_CONTEXT.md resolves against the tree at daf34b47b. No path went dead this range (4 files, all modified). src/core/ai/ holds 10 entries; tests/CMakeLists.txt holds 13.",
+    "2026-09-30 fix wave 554d1d545..daf34b47b, 4 files +61/-34, all modified: the agent server is started by the new GuiApplication::startAgentServer() (include/GuiApplication.h:95, src/gui/GuiApplication.cpp:207-241) from src/core/main.cpp:915 after the initial project exists, not from the GuiApplication constructor; deleteTrack (src/core/ai/AiProjectTools.cpp:441-458) deletes through TrackContainerView::deleteTrackView when a GUI is present. Line-anchor recheck: GuiApplication.cpp:229-231 -> :238-240 and :223-226 -> :232-235 (the constructor block moved down ~9 lines); AiAgentServer.cpp:47-50 and :75-77, AiProjectTools.cpp:350 and :428, DataFile.cpp:2041-2043 all UNSHIFTED (the AiProjectTools insertion is at :443-455, below both anchors). GuiApplication.h:118-121 -> :121-124.",
+    "2026-09-30 CLOSED: the startup race (server accepting before main.cpp finished loadProject) is fixed in code by daf34b47b. Do not re-raise it, and do not re-add the 'call get_project_summary first' convention as a mitigation.",
+    "2026-09-30: 'with a GUI, never delete a Track before its TrackView' was PROMOTED out of PROJECT_CONTEXT into CLAUDE.md section code-layout - it is a durable layout rule, not derivable scratch state. Reference implementation AiProjectTools.cpp:441-458; the deleting API is TrackContainerView::deleteTrackView (include/TrackContainerView.h:157, src/gui/editors/TrackContainerView.cpp:287).",
+    "2026-09-30: the harness spec's section 6 gained one bullet (:230-233) for the start-up ordering, on explicit dispatch instruction. Section 1's ownership paragraph (:58-60) still reads 'GuiApplication creates the server after MainWindow exists' - still true, since startAgentServer is a GuiApplication method, so it was left alone."
   ]
 }

@@ -227,6 +227,10 @@ Exit code 1 on clipping or an all-silent file.
 
 - Server and handlers on the GUI thread, as before; `requestChangesGuard` use
   inside handlers is unchanged.
+- The server is started from `main()` once the initial project exists
+  (`GuiApplication::startAgentServer()`), never from the `GuiApplication` constructor: no request
+  may be dispatched while the recovery dialog spins its nested loop or before
+  `loadProject()`/`createNewProject()` has run.
 - `render` still blocks in its nested event loop; the dispatch guard in §2
   keeps other requests queued until it returns.
 - Token file lives in the user's working directory; anyone able to read it
