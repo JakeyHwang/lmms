@@ -27,11 +27,21 @@
 
 #include <QObject>
 
+#include "AiPathPolicy.h"
+#include "AiProjectSnapshot.h"
+#include "AiToolRegistry.h"
 #include "lmms_export.h"
 #include "lmmsconfig.h"
 
 class QLabel;
 class QSocketNotifier;
+
+namespace lmms
+{
+
+class AiAgentServer;
+
+} // namespace lmms
 
 namespace lmms::gui
 {
@@ -105,6 +115,10 @@ private:
 	ControllerRackView* m_controllerRackView;
 	QLabel* m_loadingProgressLabel;
 	QSocketNotifier* m_sigintNotifier;
+	AiToolRegistry m_agentRegistry;
+	AiPathPolicy m_agentPolicy;
+	AiProjectSnapshot m_agentSnapshot;
+	AiAgentServer* m_agentServer = nullptr;
 };
 
 // Short-hand function

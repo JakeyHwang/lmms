@@ -32,6 +32,7 @@
 #include <QLineEdit>
 #include <QScrollArea>
 
+#include "AiAgentServer.h"
 #include "AiConfig.h"
 #include "AudioEngine.h"
 #include "embed.h"
@@ -879,6 +880,21 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	labelWidget(ai_w, tr("Agent control"));
 
 	m_agentServer = AiConfig::load().agentServer;
+	auto agentBox = new QGroupBox(tr("External agent"), ai_w);
+	auto agentLayout = new QVBoxLayout(agentBox);
+	auto agentCheckBox = new QCheckBox(tr("Allow an external agent to control LMMS over localhost (takes effect after restart)"), agentBox);
+	agentCheckBox->setChecked(m_agentServer);
+	connect(agentCheckBox, &QCheckBox::toggled, this, &SetupDialog::toggleAgentServer);
+	agentLayout->addWidget(agentCheckBox);
+	auto agentPathLbl = new QLabel(tr("While LMMS runs, the port and access token are written to:<br><code>%1</code>")
+		.arg(AiAgentServer::defaultTokenFilePath().toHtmlEscaped()), agentBox);
+	agentPathLbl->setWordWrap(true);
+	agentPathLbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+	agentLayout->addWidget(agentPathLbl);
+	auto agentWarnLbl = new QLabel(tr("Any local program that can read that file gets full control of the open project."), agentBox);
+	agentWarnLbl->setWordWrap(true);
+	agentLayout->addWidget(agentWarnLbl);
+	ai_layout->addWidget(agentBox);
 	ai_layout->addStretch();
 
 	// Add all main widgets to the layout of the settings widget

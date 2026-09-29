@@ -29,20 +29,26 @@
 #include "LmmsStyle.h"
 #include "LmmsPalette.h"
 
+#include "AiAgentServer.h"
+#include "AiConfig.h"
+#include "AiTools.h"
 #include "AutomationEditor.h"
 #include "ConfigManager.h"
 #include "ControllerRackView.h"
+#include "Engine.h"
 #include "MixerView.h"
 #include "MainWindow.h"
 #include "MicrotunerConfig.h"
 #include "PatternEditor.h"
 #include "PianoRoll.h"
 #include "ProjectNotes.h"
+#include "Song.h"
 #include "SongEditor.h"
 
 #include <QApplication>
 #include <QDebug>
 #include <QDir>
+#include <QFileInfo>
 #include <QtGlobal>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -191,6 +197,39 @@ GuiApplication::GuiApplication()
 	displayInitProgress(tr("Preparing automation editor"));
 	m_automationEditor = new AutomationEditorWindow;
 	connect(m_automationEditor, SIGNAL(destroyed(QObject*)), this, SLOT(childDestroyed(QObject*)));
+
+	if (AiConfig::load().agentServer)
+	{
+		displayInitProgress(tr("Starting agent server"));
+		auto cm = ConfigManager::inst();
+		QStringList roots;
+		for (const auto& dir : {cm->dataDir(), cm->workingDir(), cm->factoryPresetsDir(), cm->userPresetsDir(),
+				cm->factorySamplesDir(), cm->userSamplesDir()})
+		{
+			if (!dir.isEmpty()) { roots << QDir(dir).absolutePath(); }
+		}
+		m_agentPolicy.setRoots(roots);
+		auto pathAllowed = [this](const QString& p) {
+			// The project directory can change with every open/save, so it is checked live.
+			const QString& projectFile = Engine::getSong()->projectFileName();
+			if (!projectFile.isEmpty())
+			{
+				AiPathPolicy withProject = m_agentPolicy;
+				withProject.setRoots(m_agentPolicy.roots() << QFileInfo(projectFile).absolutePath());
+				return withProject.allows(p);
+			}
+			return m_agentPolicy.allows(p);
+		};
+		registerAiProjectTools(m_agentRegistry, pathAllowed);
+		registerAiDiscoveryTools(m_agentRegistry, m_agentPolicy);
+		registerAiActionTools(m_agentRegistry, pathAllowed);
+		registerAiMetaTools(m_agentRegistry, m_agentSnapshot);
+		m_agentServer = new AiAgentServer(this);
+		m_agentServer->start(&m_agentRegistry, AiAgentServer::defaultTokenFilePath());
+		// main.cpp never deletes the GuiApplication, so the server's destructor does not run at
+		// exit: the token file has to be removed on the way out of exec() instead.
+		connect(qApp, &QCoreApplication::aboutToQuit, m_agentServer, &AiAgentServer::stop);
+	}
 
 	splashScreen.finish(m_mainWindow);
 	m_mainWindow->finalize();

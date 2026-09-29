@@ -130,6 +130,9 @@ private slots:
 	void openBackgroundPicFile();
 	void setBackgroundPicFile(const QString & backgroundPicFile);
 
+	// AI settings widget.
+	void toggleAgentServer(bool enabled) { m_agentServer = enabled; }
+
 	void showRestartWarning();
 
 private:
