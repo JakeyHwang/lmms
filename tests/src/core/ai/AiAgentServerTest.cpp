@@ -175,12 +175,22 @@ private slots:
 		QTemporaryDir dir; lmms::AiAgentServer srv; QVERIFY(srv.start(&reg, dir.path() + "/a.json"));
 		g_depth = 0; g_maxDepth = 0; g_events.clear();
 		QTcpSocket a; QVERIFY(connectClient(a, srv));
+		QTcpSocket b;
+		bool bConnected = false;
+		// Client and server share this thread, so B cannot be driven from straight-line code after
+		// the write below: every wait the test could perform is itself nested *under* the slow
+		// handler's event loop and does not return until the handler has finished. Only a timer
+		// the nested loop processes itself puts a second client on the wire while `slow` runs.
+		QTimer::singleShot(50, &b, [&] {
+			b.connectToHost("127.0.0.1", srv.port());
+			bConnected = b.waitForConnected(2000);
+			b.write(line(request(srv, "ping", "B")));
+			b.flush();
+		});
 		a.write(line(request(srv, "slow", "A")));
-		QTest::qWait(50); // the slow handler is now inside its nested loop
-		QTcpSocket b; QVERIFY(connectClient(b, srv));
-		b.write(line(request(srv, "ping", "B")));
 		QVERIFY(QTest::qWaitFor([&] { return a.canReadLine(); }, 3000));
 		QCOMPARE(QJsonDocument::fromJson(a.readLine()).object()["id"].toString(), QString("A"));
+		QVERIFY(bConnected);
 		QVERIFY(QTest::qWaitFor([&] { return b.canReadLine(); }, 3000));
 		QCOMPARE(QJsonDocument::fromJson(b.readLine()).object()["id"].toString(), QString("B"));
 		// Server-side proof, immune to client-side polling races: B's ping ran after the slow
