@@ -131,15 +131,6 @@ private slots:
 	void openBackgroundPicFile();
 	void setBackgroundPicFile(const QString & backgroundPicFile);
 
-	// AI settings widget.
-	void setAiBaseUrl(const QString & baseUrl);
-	void setAiApiKey(const QString & apiKey);
-	void setAiModel(const QString & model);
-	void setAiMaxTokens(int maxTokens);
-	void toggleAiDisableThinking(bool disable);
-	void toggleAiKeyVisible(bool visible);
-	void testAiConnection();
-
 	void showRestartWarning();
 
 private:
@@ -233,13 +224,7 @@ private:
 	QLineEdit * m_backgroundPicFileLineEdit;
 
 	// AI settings widgets.
-	QString m_aiBaseUrl;
-	QString m_aiApiKey;
-	QString m_aiModel;
-	int m_aiMaxTokens;
-	bool m_aiDisableThinking;
-	QLineEdit * m_aiKeyLineEdit;
-	QLabel * m_aiTestResultLbl;
+	bool m_agentServer;
 
 	QLabel * restartWarningLbl;
 };

@@ -96,11 +96,7 @@ set(LMMS_SRCS
 	core/ai/AiDiscoveryTools.cpp
 	core/ai/AiPathPolicy.cpp
 	core/ai/AiProjectTools.cpp
-	core/ai/AiPromptBuilder.cpp
-	core/ai/AiSession.cpp
 	core/ai/AiToolRegistry.cpp
-	core/ai/OpenAiClient.cpp
-	core/ai/OpenAiStreamParser.cpp
 
 	core/audio/AudioAlsa.cpp
 	core/audio/AudioDevice.cpp

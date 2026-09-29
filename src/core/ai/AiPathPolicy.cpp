@@ -25,7 +25,6 @@
 #include "AiPathPolicy.h"
 
 #include <QDir>
-#include <QRegularExpression>
 
 #include "lmmsconfig.h"
 
@@ -57,31 +56,11 @@ void AiPathPolicy::setRoots(QStringList roots)
 	}
 }
 
-void AiPathPolicy::allowFromUserText(const QString& text)
-{
-	// An absolute Windows (`C:\...`, `C:/...`) or POSIX (`/...`) path, running to the next whitespace
-	// or quote. The look-behind stops fractions like "3/4" from being read as the path "/4".
-	static const QRegularExpression re(R"((?<![^\s"'`(\[])([A-Za-z]:[\\/][^\s"'`<>|?*]+|/[^\s"'`<>|?*]+))");
-	static const QRegularExpression driveOnly("^[a-zA-Z]:$");
-	static const QString trailingPunctuation(",.;:)]");
-	for (auto m = re.globalMatch(text); m.hasNext();)
-	{
-		QString p = m.next().captured(1);
-		while (!p.isEmpty() && trailingPunctuation.contains(p.back())) { p.chop(1); }
-		const bool dir = p.endsWith('/') || p.endsWith('\\');
-		if (hasDotDot(p)) { continue; }   // never grant a dot-dot path, even as an exact file
-		const QString c = canon(p);
-		if (dir && (c == "/" || driveOnly.match(c).hasMatch())) { continue; }   // never grant a whole drive / root fs
-		(dir ? m_roots : m_files) << c;
-	}
-}
-
 bool AiPathPolicy::allows(const QString& path) const
 {
 	const QString trimmed = path.trimmed();
 	if (trimmed.isEmpty() || hasDotDot(trimmed)) { return false; }
 	const QString c = canon(trimmed);
-	if (m_files.contains(c)) { return true; }
 	for (const auto& r : m_roots)
 	{
 		if (c == r || c.startsWith(r + '/')) { return true; }

@@ -35,24 +35,21 @@ namespace lmms
 
 /*! Which files the model may reference by path.
  *
- * Allowed are files under any root directory (LMMS data/working dirs, plus directories the user
- * named in chat) and exact files the user named in chat. Paths are compared in a canonical form:
- * forward slashes, cleaned, no trailing slash, lower-cased on Windows. Any `..` segment is refused.
+ * Allowed are files under any root directory (LMMS data/working dirs). Paths are compared in a
+ * canonical form: forward slashes, cleaned, no trailing slash, lower-cased on Windows. Any `..`
+ * segment is refused.
  */
 class LMMS_EXPORT AiPathPolicy
 {
 public:
 	//! Replace the root directories; blank entries are dropped.
 	void setRoots(QStringList roots);
-	//! Grant every absolute path mentioned in `text`: a trailing slash grants the directory, otherwise the file.
-	void allowFromUserText(const QString& text);
 	bool allows(const QString& path) const;
 	QStringList roots() const { return m_roots; }
 
 private:
 	static QString canon(const QString& p);
 	QStringList m_roots;      // directories, canonical, no trailing slash
-	QStringList m_files;      // exact files, canonical
 };
 
 } // namespace lmms

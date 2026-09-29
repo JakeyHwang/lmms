@@ -36,7 +36,6 @@
 #include <QSplitter>
 
 #include "AboutDialog.h"
-#include "AiChatView.h"
 #include "AutomationEditor.h"
 #include "ControllerRackView.h"
 #include "DeprecationHelper.h"
@@ -458,10 +457,6 @@ void MainWindow::finalize()
 		tr("Show/hide project notes") + " (Ctrl+7)", this, SLOT(toggleProjectNotesWin()), m_toolBar);
 	project_notes_window->setShortcut(keySequence(Qt::CTRL, Qt::Key_7));
 
-	auto ai_chat_window = new ToolButton(embed::getIconPixmap("project_notes"),
-		tr("Show/hide AI Composer") + " (Ctrl+Alt+A)", this, SLOT(toggleAiChatWin()), m_toolBar);
-	ai_chat_window->setShortcut(keySequence(Qt::CTRL, Qt::ALT, Qt::Key_A));
-
 	m_toolBarLayout->addWidget( song_editor_window, 1, 1 );
 	m_toolBarLayout->addWidget( pattern_editor_window, 1, 2 );
 	m_toolBarLayout->addWidget( piano_roll_window, 1, 3 );
@@ -469,7 +464,6 @@ void MainWindow::finalize()
 	m_toolBarLayout->addWidget( mixer_window, 1, 5 );
 	m_toolBarLayout->addWidget( controllers_window, 1, 6 );
 	m_toolBarLayout->addWidget( project_notes_window, 1, 7 );
-	m_toolBarLayout->addWidget( ai_chat_window, 1, 8 );
 	m_toolBarLayout->setColumnStretch( 100, 1 );
 
 	// setup-dialog opened before?
@@ -478,7 +472,7 @@ void MainWindow::finalize()
 		ConfigManager::inst()->setValue( "app", "configured", "1" );
 		// no, so show it that user can setup everything
 		SetupDialog sd;
-		if (sd.exec() == QDialog::Accepted) { getGUI()->aiChatView()->reloadConfig(); }
+		sd.exec();
 	}
 	// look whether the audio engine failed to start the audio device selected by the
 	// user and is using AudioDummy as a fallback
@@ -491,7 +485,7 @@ void MainWindow::finalize()
 
 		// if so, offer the audio settings section of the setup dialog
 		SetupDialog sd( SetupDialog::ConfigTab::AudioSettings );
-		if (sd.exec() == QDialog::Accepted) { getGUI()->aiChatView()->reloadConfig(); }
+		sd.exec();
 	}
 
 	// Add editor subwindows
@@ -893,7 +887,7 @@ void MainWindow::saveProjectAsDefaultTemplate()
 void MainWindow::showSettingsDialog()
 {
 	SetupDialog sd;
-	if (sd.exec() == QDialog::Accepted && getGUI()->aiChatView()) { getGUI()->aiChatView()->reloadConfig(); }
+	sd.exec();
 }
 
 
@@ -1011,14 +1005,6 @@ void MainWindow::toggleProjectNotesWin()
 
 
 
-void MainWindow::toggleAiChatWin()
-{
-	toggleWindow( getGUI()->aiChatView() );
-}
-
-
-
-
 void MainWindow::togglePianoRollWin()
 {
 	toggleWindow( getGUI()->pianoRoll() );
@@ -1084,10 +1070,6 @@ void MainWindow::updateViewMenu()
 	m_viewMenu->addAction(embed::getIconPixmap( "project_notes" ),
 			      tr( "Project Notes" ) + "\tCtrl+7",
 			      this, SLOT(toggleProjectNotesWin())
-		);
-	m_viewMenu->addAction(embed::getIconPixmap( "project_notes" ),
-			      tr( "AI Composer" ) + "\tCtrl+Alt+A",
-			      this, SLOT(toggleAiChatWin())
 		);
 
 	m_viewMenu->addSeparator();

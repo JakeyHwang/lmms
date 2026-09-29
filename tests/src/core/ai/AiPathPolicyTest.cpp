@@ -35,7 +35,7 @@ class AiPathPolicyTest : public QObject
 {
 	Q_OBJECT
 private slots:
-	void rootsAndUserPaths()
+	void rootsAllowChildrenOnly()
 	{
 		lmms::AiPathPolicy p;
 		p.setRoots({"C:/music/lmms", "C:/Program Files/LMMS/data"});
@@ -44,10 +44,6 @@ private slots:
 		QVERIFY(!p.allows("C:/music/lmms-other/x.wav"));   // prefix but not a child dir
 		QVERIFY(!p.allows("C:/Windows/system32/x.dll"));
 		QVERIFY(!p.allows("C:/music/lmms/../../Windows/x"));
-		p.allowFromUserText("use the loop at D:/loops/break.wav please, and D:\\other\\dir\\ too");
-		QVERIFY(p.allows("D:/loops/break.wav"));
-		QVERIFY(p.allows("D:/other/dir/inner.wav"));
-		QVERIFY(!p.allows("D:/loops/other.wav"));
 	}
 	void emptyPolicyRejectsEverything()
 	{
@@ -73,36 +69,6 @@ private slots:
 #else
 		QVERIFY(!p.allows("c:/MUSIC/Lmms/X.WAV"));
 #endif
-	}
-	void userTextPunctuationAndFragments()
-	{
-		lmms::AiPathPolicy p;
-		p.allowFromUserText("try C:/a/kick.wav, then D:/b/snare.wav. Play in 3/4 time with \"E:/q/hat.wav\" and /home/u/l.ogg");
-		QVERIFY(p.allows("C:/a/kick.wav"));
-		QVERIFY(p.allows("D:/b/snare.wav"));
-		QVERIFY(p.allows("E:/q/hat.wav"));
-		QVERIFY(p.allows("/home/u/l.ogg"));
-		QVERIFY(!p.allows("/4"));                            // "3/4" is not a path
-		QVERIFY(!p.allows("C:/a"));                          // a file grant is not a directory grant
-		QVERIFY(!p.allows("C:/a/other.wav"));
-		p.allowFromUserText("everything under C:/loops/ and also C:/x/../secret/");
-		QVERIFY(p.allows("C:/loops/deep/er/x.wav"));
-		QVERIFY(!p.allows("C:/secret/x.wav"));
-		p.allowFromUserText("see `F:/tick/a.xpf` or (C:/x/y.xpf); also [G:/z/w.wav]: done");
-		QVERIFY(p.allows("F:/tick/a.xpf"));
-		QVERIFY(p.allows("C:/x/y.xpf"));
-		QVERIFY(p.allows("G:/z/w.wav"));
-		QVERIFY(!p.allows("C:/x/y.xpf)"));
-	}
-	void userTextNeverGrantsWholeDrive()
-	{
-		lmms::AiPathPolicy p;
-		p.allowFromUserText("look on D:/, on E:\\ and in /, as well as H:/ok/");
-		QCOMPARE(p.roots().size(), 1);
-		QVERIFY(!p.allows("D:/anything.wav"));
-		QVERIFY(!p.allows("E:/anything.wav"));
-		QVERIFY(!p.allows("/etc/passwd"));
-		QVERIFY(p.allows("H:/ok/x.wav"));
 	}
 	void getPresetXmlHonoursPolicy()
 	{

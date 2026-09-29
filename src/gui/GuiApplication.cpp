@@ -29,7 +29,6 @@
 #include "LmmsStyle.h"
 #include "LmmsPalette.h"
 
-#include "AiChatView.h"
 #include "AutomationEditor.h"
 #include "ConfigManager.h"
 #include "ControllerRackView.h"
@@ -173,10 +172,6 @@ GuiApplication::GuiApplication()
 	m_controllerRackView = new ControllerRackView;
 	connect(m_controllerRackView, SIGNAL(destroyed(QObject*)), this, SLOT(childDestroyed(QObject*)));
 
-	displayInitProgress(tr("Preparing AI composer"));
-	m_aiChatView = new AiChatView;
-	connect(m_aiChatView, SIGNAL(destroyed(QObject*)), this, SLOT(childDestroyed(QObject*)));
-
 	displayInitProgress(tr("Preparing project notes"));
 	m_projectNotes = new ProjectNotes;
 	connect(m_projectNotes, SIGNAL(destroyed(QObject*)), this, SLOT(childDestroyed(QObject*)));
@@ -258,10 +253,6 @@ void GuiApplication::childDestroyed(QObject *obj)
 	else if (obj == m_controllerRackView)
 	{
 		m_controllerRackView = nullptr;
-	}
-	else if (obj == m_aiChatView)
-	{
-		m_aiChatView = nullptr;
 	}
 }
 
