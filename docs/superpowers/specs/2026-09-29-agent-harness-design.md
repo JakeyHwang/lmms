@@ -1,7 +1,7 @@
 # Agent harness — design
 
 Date: 2026-09-29
-Status: approved design, pending implementation plan
+Status: implemented (plan `../plans/2026-09-29-agent-harness.md`, all tasks landed)
 Supersedes: `2026-09-16-ai-composer-design.md` (the in-app LLM chat panel)
 
 ## Goal
