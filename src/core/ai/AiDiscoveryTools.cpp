@@ -1,5 +1,5 @@
 /*
- * AiDiscoveryTools.cpp - AI Composer tools that list plugins, presets and samples
+ * AiDiscoveryTools.cpp - agent harness tools that list plugins, presets and samples
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *

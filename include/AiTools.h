@@ -1,5 +1,5 @@
 /*
- * AiTools.h - registration entry points for the AI Composer tool sets
+ * AiTools.h - registration entry points for the agent harness tool sets
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *

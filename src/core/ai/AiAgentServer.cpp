@@ -72,6 +72,9 @@ bool AiAgentServer::start(AiToolRegistry* registry, const QString& tokenFilePath
 		return false;
 	}
 	m_tokenFile = tokenFilePath;
+	// Defence in depth: keep the port/token pair out of other accounts' reach. On Windows this only
+	// maps onto the read-only attribute, so the call is best effort and its result is not checked.
+	QFile::setPermissions(m_tokenFile, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
 	connect(m_server, &QTcpServer::newConnection, this, &AiAgentServer::onNewConnection);
 	qInfo("AiAgentServer: listening on 127.0.0.1:%u, token file %s", m_server->serverPort(), qPrintable(m_tokenFile));
 	return true;

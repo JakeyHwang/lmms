@@ -1,5 +1,5 @@
 /*
- * AiPathPolicy.cpp - allow list of file-system paths the AI Composer tools may read
+ * AiPathPolicy.cpp - allow list of file-system paths the agent harness tools may read
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *

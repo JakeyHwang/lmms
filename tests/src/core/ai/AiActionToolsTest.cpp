@@ -1,5 +1,5 @@
 /*
- * AiActionToolsTest.cpp - engine-backed tests for the AI Composer action tools
+ * AiActionToolsTest.cpp - engine-backed tests for the agent harness action tools
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *

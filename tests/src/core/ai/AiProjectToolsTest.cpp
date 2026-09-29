@@ -1,5 +1,5 @@
 /*
- * AiProjectToolsTest.cpp - engine-backed tests for the AI Composer project tools
+ * AiProjectToolsTest.cpp - engine-backed tests for the agent harness project tools
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *

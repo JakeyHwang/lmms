@@ -1,5 +1,5 @@
 /*
- * AiActionTools.cpp - AI Composer tools that drive transport, export and project files
+ * AiActionTools.cpp - agent harness tools that drive transport, export and project files
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *

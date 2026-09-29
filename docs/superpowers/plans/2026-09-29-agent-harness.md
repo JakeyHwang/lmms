@@ -1072,4 +1072,4 @@ Body sections, in this order, each concrete (commands, tool names, numbers): **C
 
 ### Task 11: Docs sync (controller)
 
-- [ ] Dispatch the context-steward over the full range; relay its report. `CLAUDE.md` auto blocks must no longer mention `data/ai`, `Ctrl+Alt+A`, `OpenAi*`, `AiSession`, `AiChatView`, or the 8-test AI count.
+- [x] Dispatch the context-steward over the full range; relay its report. `CLAUDE.md` auto blocks must not present `data/ai`, `Ctrl+Alt+A`, `OpenAi*`, `AiSession`, `AiChatView`, or the 8-test AI count as current.

@@ -68,6 +68,7 @@ bool AiProjectSnapshot::restore()
 		if (!tmp.open()) { return false; }
 	}
 	if (tmp.write(m_data) != m_data.size()) { return false; }
+	if (!tmp.flush()) { return false; }
 	tmp.close(); // still auto-removed on destruction
 	song->loadProject(tmp.fileName()); // leaves the song unmodified
 	song->setProjectFileName(m_fileName);

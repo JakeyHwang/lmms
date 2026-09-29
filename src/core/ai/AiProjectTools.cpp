@@ -1,5 +1,5 @@
 /*
- * AiProjectTools.cpp - AI Composer tools that read and edit the open project
+ * AiProjectTools.cpp - agent harness tools that read and edit the open project
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *

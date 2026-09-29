@@ -1,5 +1,5 @@
 /*
- * AiToolRegistry.h - named tool table the AI Composer session dispatches into
+ * AiToolRegistry.h - named tool table the agent server dispatches into
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *

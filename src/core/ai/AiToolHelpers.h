@@ -1,5 +1,5 @@
 /*
- * AiToolHelpers.h - private helpers shared by the AI Composer tool handlers
+ * AiToolHelpers.h - private helpers shared by the agent harness tool handlers
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *

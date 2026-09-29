@@ -1,5 +1,5 @@
 /*
- * AiPathPolicyTest.cpp - tests for the AI Composer file-path allow list
+ * AiPathPolicyTest.cpp - tests for the agent harness file-path allow list
  *
  * Copyright (c) 2026 LMMS Developers <lmms-devel@lists.sourceforge.net>
  *
