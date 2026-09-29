@@ -13,6 +13,7 @@ set(LMMS_TESTS
 	src/core/TimelineTest.cpp
 	src/core/ai/AiPathPolicyTest.cpp
 	src/core/ai/AiActionToolsTest.cpp
+	src/core/ai/AiAgentServerTest.cpp
 	src/core/ai/AiProjectToolsTest.cpp
 	src/core/ai/AiPromptBuilderTest.cpp
 	src/core/ai/AiSessionTest.cpp
