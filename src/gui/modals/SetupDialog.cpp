@@ -25,6 +25,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QGroupBox>
 #include <QImageReader>
 #include <QLabel>
 #include <QLayout>

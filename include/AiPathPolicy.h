@@ -49,7 +49,7 @@ public:
 
 private:
 	static QString canon(const QString& p);
-	QStringList m_roots;      // directories, canonical, no trailing slash
+	QStringList m_roots; // directories, canonical, no trailing slash
 };
 
 } // namespace lmms

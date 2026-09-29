@@ -38,7 +38,6 @@ class QCheckBox;
 class QComboBox;
 class QLabel;
 class QLineEdit;
-class QSpinBox;
 class QSlider;
 
 
