@@ -65,7 +65,7 @@ Dependency graph: Task 1 → Task 2 → (merge Task 3) → Task 4 → Task 9 (in
   ```
   Tools `ping → {ok, version}`, `list_tools → {ok, tools:[…specs…]}`, `checkpoint → {ok}`, `revert → {ok}` / `{ok:false, error:"No checkpoint held"}`, `commit → {ok}` / same error, `add_sf2_track(name, file, bank?=0, patch?=0, mixerChannel?) → {ok, index}`.
 
-- [ ] **Step 1: Write the failing tests** — append to `AiProjectToolsTest` (the class registers only project tools in `initTestCase`; extend it):
+- [x] **Step 1: Write the failing tests** — append to `AiProjectToolsTest` (the class registers only project tools in `initTestCase`; extend it):
 
 ```cpp
 // in initTestCase(): lmms::Engine::init(true); lmms::registerAiProjectTools(reg); lmms::registerAiMetaTools(reg, snap);
@@ -128,9 +128,9 @@ Dependency graph: Task 1 → Task 2 → (merge Task 3) → Task 4 → Task 9 (in
 	}
 ```
 
-- [ ] **Step 2: Build and run to see them fail** — `cmake --build build --target AiProjectToolsTest` fails to compile (`registerAiMetaTools` undeclared). Expected.
+- [x] **Step 2: Build and run to see them fail** — `cmake --build build --target AiProjectToolsTest` fails to compile (`registerAiMetaTools` undeclared). Expected.
 
-- [ ] **Step 3: `AiProjectSnapshot`** — `include/AiProjectSnapshot.h`:
+- [x] **Step 3: `AiProjectSnapshot`** — `include/AiProjectSnapshot.h`:
 
 ```cpp
 #ifndef LMMS_AI_PROJECT_SNAPSHOT_H
@@ -237,7 +237,7 @@ void AiProjectSnapshot::drop()
 } // namespace lmms
 ```
 
-- [ ] **Step 4: meta-tools** — `src/core/ai/AiMetaTools.cpp`:
+- [x] **Step 4: meta-tools** — `src/core/ai/AiMetaTools.cpp`:
 
 ```cpp
 #include "AiProjectSnapshot.h"
@@ -287,7 +287,7 @@ class AiProjectSnapshot;
 LMMS_EXPORT void registerAiMetaTools(AiToolRegistry& r, AiProjectSnapshot& snapshot);
 ```
 
-- [ ] **Step 5: `add_sf2_track`** — in `AiProjectTools.cpp` after `addInstrumentTrack` (needs `#include <QFileInfo>` and `#include <QDomDocument>`; `addTrackXml` is defined later in the file, so add a forward declaration `static QJsonObject addTrackXml(const QJsonObject& a);` above):
+- [x] **Step 5: `add_sf2_track`** — in `AiProjectTools.cpp` after `addInstrumentTrack` (needs `#include <QFileInfo>` and `#include <QDomDocument>`; `addTrackXml` is defined later in the file, so add a forward declaration `static QJsonObject addTrackXml(const QJsonObject& a);` above):
 
 ```cpp
 //! Instrument track playing a SoundFont preset through sf2player, built as <track> XML so it goes
@@ -344,11 +344,11 @@ Register right after `add_instrument_track` (`:888-892`):
 
 (`mixerIndex` is the schema piece `add_instrument_track` already uses; keep the same object.)
 
-- [ ] **Step 6: CMake** — add `core/ai/AiMetaTools.cpp` and `core/ai/AiProjectSnapshot.cpp` to the `core/ai/` group in `src/core/CMakeLists.txt`, alphabetical. Re-run `cmake build`, remove `build/src/lmmsobjs_autogen/timestamp`, build `AiProjectToolsTest`.
+- [x] **Step 6: CMake** — add `core/ai/AiMetaTools.cpp` and `core/ai/AiProjectSnapshot.cpp` to the `core/ai/` group in `src/core/CMakeLists.txt`, alphabetical. Re-run `cmake build`, remove `build/src/lmmsobjs_autogen/timestamp`, build `AiProjectToolsTest`.
 
-- [ ] **Step 7: Run** — `build/tests/AiProjectToolsTest.exe -o /tmp/t1.txt,txt`; all cases pass (plugin cases `SKIP`).
+- [x] **Step 7: Run** — `build/tests/AiProjectToolsTest.exe -o /tmp/t1.txt,txt`; all cases pass (plugin cases `SKIP`).
 
-- [ ] **Step 8: Commit** — `git add include/AiProjectSnapshot.h include/AiTools.h src/core/ai/AiProjectSnapshot.cpp src/core/ai/AiMetaTools.cpp src/core/ai/AiProjectTools.cpp src/core/CMakeLists.txt tests/src/core/ai/AiProjectToolsTest.cpp && git commit -m "feat(ai): project snapshot, meta tools, add_sf2_track"`.
+- [x] **Step 8: Commit** — `git add include/AiProjectSnapshot.h include/AiTools.h src/core/ai/AiProjectSnapshot.cpp src/core/ai/AiMetaTools.cpp src/core/ai/AiProjectTools.cpp src/core/CMakeLists.txt tests/src/core/ai/AiProjectToolsTest.cpp && git commit -m "feat(ai): project snapshot, meta tools, add_sf2_track"`.
 
 ---
 
@@ -376,7 +376,7 @@ Register right after `add_instrument_track` (`:888-892`):
   };
   ```
 
-- [ ] **Step 1: Write the failing test** — `tests/src/core/ai/AiAgentServerTest.cpp`:
+- [x] **Step 1: Write the failing test** — `tests/src/core/ai/AiAgentServerTest.cpp`:
 
 ```cpp
 #include <QJsonArray>
@@ -500,9 +500,9 @@ QTEST_MAIN(AiAgentServerTest)
 #include "AiAgentServerTest.moc"
 ```
 
-- [ ] **Step 2: Build to see it fail** — add the test to `tests/CMakeLists.txt`; `cmake --build build --target AiAgentServerTest` fails on the missing header. Expected.
+- [x] **Step 2: Build to see it fail** — add the test to `tests/CMakeLists.txt`; `cmake --build build --target AiAgentServerTest` fails on the missing header. Expected.
 
-- [ ] **Step 3: Header** — `include/AiAgentServer.h`:
+- [x] **Step 3: Header** — `include/AiAgentServer.h`:
 
 ```cpp
 #ifndef LMMS_AI_AGENT_SERVER_H
@@ -570,7 +570,7 @@ private:
 #endif // LMMS_AI_AGENT_SERVER_H
 ```
 
-- [ ] **Step 4: Implementation** — `src/core/ai/AiAgentServer.cpp`:
+- [x] **Step 4: Implementation** — `src/core/ai/AiAgentServer.cpp`:
 
 ```cpp
 #include "AiAgentServer.h"
@@ -732,11 +732,11 @@ QByteArray AiAgentServer::handleLine(const QByteArray& line, bool* closeAfter)
 
 Note on `stop()` inside `start()` failure paths: `stop()` resets `m_registry`; the early `stop()` call at the top of `start()` runs before `m_registry` is assigned, so order is correct.
 
-- [ ] **Step 5: CMake + build** — add `core/ai/AiAgentServer.cpp` to `src/core/CMakeLists.txt`; `cmake build`; delete `build/src/lmmsobjs_autogen/timestamp`; `cmake --build build --target AiAgentServerTest`.
+- [x] **Step 5: CMake + build** — add `core/ai/AiAgentServer.cpp` to `src/core/CMakeLists.txt`; `cmake build`; delete `build/src/lmmsobjs_autogen/timestamp`; `cmake --build build --target AiAgentServerTest`.
 
-- [ ] **Step 6: Run** — `build/tests/AiAgentServerTest.exe -o /tmp/t2.txt,txt`; 7 cases pass.
+- [x] **Step 6: Run** — `build/tests/AiAgentServerTest.exe -o /tmp/t2.txt,txt`; 7 cases pass.
 
-- [ ] **Step 7: Commit** — `git add include/AiAgentServer.h src/core/ai/AiAgentServer.cpp src/core/CMakeLists.txt tests/CMakeLists.txt tests/src/core/ai/AiAgentServerTest.cpp && git commit -m "feat(ai): loopback agent server"`.
+- [x] **Step 7: Commit** — `git add include/AiAgentServer.h src/core/ai/AiAgentServer.cpp src/core/CMakeLists.txt tests/CMakeLists.txt tests/src/core/ai/AiAgentServerTest.cpp && git commit -m "feat(ai): loopback agent server"`.
 
 ---
 
@@ -750,15 +750,15 @@ Note on `stop()` inside `start()` failure paths: `stop()` resets `m_registry`; t
 - Produces: `struct LMMS_EXPORT AiConfig { bool agentServer = false; static AiConfig load(); static void save(const AiConfig&); };` with config key class `"ai"`, attribute `"agentserver"`, value `"1"`/`"0"`. The AI settings page stays registered as `ConfigTab::AiSettings` and is reduced to `labelWidget(ai_w, tr("Agent control"))` plus an empty `QVBoxLayout` with a stretch — Task 4 fills it. `SetupDialog::accept()`'s AI line becomes `AiConfig::save({m_agentServer});` with a new `bool m_agentServer` member loaded from `AiConfig::load().agentServer` where the old `m_aiBaseUrl…` were loaded.
 - Removes: `GuiApplication::aiChatView()`, `MainWindow::toggleAiChatWin`, `Ctrl+Alt+A`.
 
-- [ ] **Step 1: Worktree** — `cd C:/git_repos/lmms-wt/t10 && git checkout -B harness-removal <BASE>` where `<BASE>` is the commit the controller names in the dispatch (the `ai-composer` head at dispatch time). Build cache in `t10/build` is reused.
+- [x] **Step 1: Worktree** — `cd C:/git_repos/lmms-wt/t10 && git checkout -B harness-removal <BASE>` where `<BASE>` is the commit the controller names in the dispatch (the `ai-composer` head at dispatch time). Build cache in `t10/build` is reused.
 
-- [ ] **Step 2: Delete files** — `git rm` every path in the Delete list. `git rm -r data/ai tests/scripted/ai_mock_server.py`.
+- [x] **Step 2: Delete files** — `git rm` every path in the Delete list. `git rm -r data/ai tests/scripted/ai_mock_server.py`.
 
-- [ ] **Step 3: CMake lists** — remove the entries named above. `data/CMakeLists.txt` loses line 1 only.
+- [x] **Step 3: CMake lists** — remove the entries named above. `data/CMakeLists.txt` loses line 1 only.
 
-- [ ] **Step 4: GUI wiring** — in `MainWindow.cpp` remove the include, the `ai_chat_window` ToolButton block (`:461-463`), the two `if (sd.exec() == QDialog::Accepted) { getGUI()->aiChatView()->reloadConfig(); }` bodies become `sd.exec();`, `showSettingsDialog()` likewise, delete `toggleAiChatWin()` and the View-menu `addAction` for "AI Composer" (`:1085-1091` — keep the following `addSeparator` only if there is still an item before it; check the result reads as upstream's menu). Remove the slot declaration from `include/MainWindow.h`. In `GuiApplication.cpp` remove the include, the "Preparing AI composer" block, the `childDestroyed` branch; in `GuiApplication.h` the forward declaration, accessor and member.
+- [x] **Step 4: GUI wiring** — in `MainWindow.cpp` remove the include, the `ai_chat_window` ToolButton block (`:461-463`), the two `if (sd.exec() == QDialog::Accepted) { getGUI()->aiChatView()->reloadConfig(); }` bodies become `sd.exec();`, `showSettingsDialog()` likewise, delete `toggleAiChatWin()` and the View-menu `addAction` for "AI Composer" (`:1085-1091` — keep the following `addSeparator` only if there is still an item before it; check the result reads as upstream's menu). Remove the slot declaration from `include/MainWindow.h`. In `GuiApplication.cpp` remove the include, the "Preparing AI composer" block, the `childDestroyed` branch; in `GuiApplication.h` the forward declaration, accessor and member.
 
-- [ ] **Step 5: Settings page** — `SetupDialog.cpp`: remove `#include "AiConfig.h"`? No — keep it (Task 4 and `accept()` use it); remove `#include "OpenAiClient.h"`. Replace the AI page body (`:885-961`) with:
+- [x] **Step 5: Settings page** — `SetupDialog.cpp`: remove `#include "AiConfig.h"`? No — keep it (Task 4 and `accept()` use it); remove `#include "OpenAiClient.h"`. Replace the AI page body (`:885-961`) with:
 
 ```cpp
 	m_agentServer = AiConfig::load().agentServer;
@@ -767,7 +767,7 @@ Note on `stop()` inside `start()` failure paths: `stop()` resets `m_registry`; t
 
 Replace `AiConfig::save({m_aiBaseUrl, m_aiApiKey, m_aiModel, m_aiMaxTokens, m_aiDisableThinking});` with `AiConfig::save({m_agentServer});`. Delete the slot bodies `setAiBaseUrl`, `setAiApiKey`, `setAiModel`, `setAiMaxTokens`, `toggleAiDisableThinking`, `toggleAiKeyVisible`, `testAiConnection` and their declarations; delete the `m_ai*` members; add `bool m_agentServer;` under the `// AI settings widgets.` comment.
 
-- [ ] **Step 6: AiConfig** — `include/AiConfig.h` struct body becomes:
+- [x] **Step 6: AiConfig** — `include/AiConfig.h` struct body becomes:
 
 ```cpp
 struct LMMS_EXPORT AiConfig
@@ -797,13 +797,13 @@ void AiConfig::save(const AiConfig& c)
 
 Remove `DefaultBaseUrl` and `configured()` if present.
 
-- [ ] **Step 7: AiPathPolicy** — remove `allowFromUserText`, `m_files`, and the `m_files` check in `allows()`; update the class comment ("Allowed are files under any root directory"). Delete the test cases in `AiPathPolicyTest.cpp` that call `allowFromUserText`; keep root/`..`/canonical-form cases.
+- [x] **Step 7: AiPathPolicy** — remove `allowFromUserText`, `m_files`, and the `m_files` check in `allows()`; update the class comment ("Allowed are files under any root directory"). Delete the test cases in `AiPathPolicyTest.cpp` that call `allowFromUserText`; keep root/`..`/canonical-form cases.
 
-- [ ] **Step 8: Build** — `cmake build` (source lists changed), `rm -f build/src/lmmsobjs_autogen/timestamp`, `cmake --build build`. Fix any remaining reference the compiler finds (grep `AiChatView|OpenAiClient|AiSession|AiPromptBuilder|aiChatView` across `src include tests` must return nothing).
+- [x] **Step 8: Build** — `cmake build` (source lists changed), `rm -f build/src/lmmsobjs_autogen/timestamp`, `cmake --build build`. Fix any remaining reference the compiler finds (grep `AiChatView|OpenAiClient|AiSession|AiPromptBuilder|aiChatView` across `src include tests` must return nothing).
 
-- [ ] **Step 9: Run retained tests** — `AiPathPolicyTest`, `AiToolRegistryTest`, `AiProjectToolsTest`, `AiActionToolsTest` via `build/tests/<Name>.exe -o /tmp/<Name>.txt,txt`; all pass. Launch `build/lmms.exe` once, open Settings: the AI tab exists and is empty apart from its title; there is no AI Composer toolbar button or View-menu entry; `Ctrl+Alt+A` does nothing. Close.
+- [x] **Step 9: Run retained tests** — `AiPathPolicyTest`, `AiToolRegistryTest`, `AiProjectToolsTest`, `AiActionToolsTest` via `build/tests/<Name>.exe -o /tmp/<Name>.txt,txt`; all pass. Launch `build/lmms.exe` once, open Settings: the AI tab exists and is empty apart from its title; there is no AI Composer toolbar button or View-menu entry; `Ctrl+Alt+A` does nothing. Close.
 
-- [ ] **Step 10: Commit** — one commit: `git add -A && git commit -m "refactor(ai): remove in-app LLM composer; keep tool layer"`.
+- [x] **Step 10: Commit** — one commit: `git add -A && git commit -m "refactor(ai): remove in-app LLM composer; keep tool layer"`.
 
 ---
 
@@ -815,7 +815,7 @@ Remove `DefaultBaseUrl` and `configured()` if present.
 **Interfaces:**
 - Consumes: `AiAgentServer` (Task 2), `registerAiMetaTools` + `AiProjectSnapshot` (Task 1), `AiConfig::agentServer` (Task 3), `registerAiProjectTools/DiscoveryTools/ActionTools` (`include/AiTools.h`), `AiPathPolicy::setRoots`.
 
-- [ ] **Step 1: Settings page body** — replace the two lines left by Task 3 with:
+- [x] **Step 1: Settings page body** — replace the two lines left by Task 3 with:
 
 ```cpp
 	m_agentServer = AiConfig::load().agentServer;
@@ -839,7 +839,7 @@ Remove `DefaultBaseUrl` and `configured()` if present.
 
 Add `#include "AiAgentServer.h"`; slot `void toggleAgentServer(bool enabled) { m_agentServer = enabled; }` declared under the AI comment in the header.
 
-- [ ] **Step 2: GuiApplication** — header: forward-declare `class AiAgentServer;` and add members
+- [x] **Step 2: GuiApplication** — header: forward-declare `class AiAgentServer;` and add members
 
 ```cpp
 	AiToolRegistry m_agentRegistry;
@@ -884,9 +884,9 @@ Add `#include "AiAgentServer.h"`; slot `void toggleAgentServer(bool enabled) { m
 
 Includes: `AiAgentServer.h`, `AiConfig.h`, `AiTools.h`, `Engine.h`, `Song.h`, `<QDir>`, `<QFileInfo>`. `registerAiDiscoveryTools` takes the policy by reference and reads roots at call time, so it sees the static roots only; `get_preset_xml` on a preset next to the project file is the only case that loses, acceptable.
 
-- [ ] **Step 3: Build and check** — full `cmake --build build`. Launch `build/lmms.exe`; Settings → AI shows the checkbox and path; tick it, OK, quit, relaunch; the console prints `AiAgentServer: listening on 127.0.0.1:<port>` and the token file exists at the printed path with `port` and `token`. From bash: `printf '{"id":1,"token":"%s","tool":"ping"}\n' "$(python -c "import json;print(json.load(open(r'<path>'))['token'])")" | python -c "import socket,sys,json;f=json.load(open(r'<path>'));s=socket.create_connection(('127.0.0.1',f['port']));s.sendall(sys.stdin.buffer.read());print(s.recv(4096))"` prints `{"id":1,"result":{"ok":true,"version":"…"}}`. Quit LMMS; the token file is gone.
+- [x] **Step 3: Build and check** — full `cmake --build build`. Launch `build/lmms.exe`; Settings → AI shows the checkbox and path; tick it, OK, quit, relaunch; the console prints `AiAgentServer: listening on 127.0.0.1:<port>` and the token file exists at the printed path with `port` and `token`. From bash: `printf '{"id":1,"token":"%s","tool":"ping"}\n' "$(python -c "import json;print(json.load(open(r'<path>'))['token'])")" | python -c "import socket,sys,json;f=json.load(open(r'<path>'));s=socket.create_connection(('127.0.0.1',f['port']));s.sendall(sys.stdin.buffer.read());print(s.recv(4096))"` prints `{"id":1,"result":{"ok":true,"version":"…"}}`. Quit LMMS; the token file is gone.
 
-- [ ] **Step 4: Commit** — `git add src/gui/modals/SetupDialog.cpp include/SetupDialog.h src/gui/GuiApplication.cpp include/GuiApplication.h && git commit -m "feat(ai): agent server setting and start-up"`.
+- [x] **Step 4: Commit** — `git add src/gui/modals/SetupDialog.cpp include/SetupDialog.h src/gui/GuiApplication.cpp include/GuiApplication.h && git commit -m "feat(ai): agent server setting and start-up"`.
 
 ---
 
@@ -911,7 +911,7 @@ Includes: `AiAgentServer.h`, `AiConfig.h`, `AiTools.h`, `Engine.h`, `Song.h`, `<
   ```
   CLI: `lmmsctl.py tools [--schema]`, `lmmsctl.py summary`, `lmmsctl.py call <tool> [<json>] [--args-file F] [-]`. Exit 0 on `ok:true`, 1 on `ok:false`, 2 on transport error; prints the result JSON (indent 2) to stdout, errors to stderr.
 
-- [ ] **Step 1: Failing tests** — `test_lmmsctl.py` with a stub NDJSON server in a thread:
+- [x] **Step 1: Failing tests** — `test_lmmsctl.py` with a stub NDJSON server in a thread:
 
 ```python
 import json, os, socket, socketserver, tempfile, threading, unittest
@@ -977,13 +977,13 @@ class LmmsctlTest(unittest.TestCase):
 if __name__ == "__main__": unittest.main()
 ```
 
-- [ ] **Step 2: Run to see it fail** — `cd .claude/skills/lmms-composer/scripts && python -m unittest test_lmmsctl -v` → `ModuleNotFoundError: lmmsctl`.
+- [x] **Step 2: Run to see it fail** — `cd .claude/skills/lmms-composer/scripts && python -m unittest test_lmmsctl -v` → `ModuleNotFoundError: lmmsctl`.
 
-- [ ] **Step 3: Implement `lmmsctl.py`** — module docstring with the CLI usage; `token_file_path()` reads `LMMS_AGENT_FILE`, else parses `~/.lmmsrc.xml` (`<paths workingdir="…">`, `xml.etree`) when present, else `Path.home() / "lmms"`, and returns `<workingdir>/.lmms-agent.json`. `Lmms.__init__` stores the path, connects lazily on first `call` (`socket.create_connection(("127.0.0.1", port), timeout)`, `makefile("rb")` for line reads); a missing token file raises `LmmsError("No agent connection file at <path>. In LMMS enable Settings > AI > 'Allow an external agent…' and restart LMMS.")`; connection refused raises `LmmsError` naming the port. `call` sends `{"id": n, "token", "tool", "args"}` with an incrementing id, reads one line, raises `LmmsError(reply["error"])` on `error`, returns `reply["result"]`. `ok` calls `call` and raises `LmmsToolError(result.get("error", "tool failed"))` when `not result.get("ok")`. Context manager support (`__enter__`/`__exit__` → `close`). CLI in `main(argv=None) -> int` with `argparse` subcommands as specified; `call` merges the inline JSON string, `--args-file`, and `-` (stdin) — exactly one source, or none for `{}`; `tools` prints `name — first sentence of description` per line, `--schema` dumps the full array; `summary` prints `get_project_summary`. `if __name__ == "__main__": sys.exit(main())`.
+- [x] **Step 3: Implement `lmmsctl.py`** — module docstring with the CLI usage; `token_file_path()` reads `LMMS_AGENT_FILE`, else parses `~/.lmmsrc.xml` (`<paths workingdir="…">`, `xml.etree`) when present, else `Path.home() / "lmms"`, and returns `<workingdir>/.lmms-agent.json`. `Lmms.__init__` stores the path, connects lazily on first `call` (`socket.create_connection(("127.0.0.1", port), timeout)`, `makefile("rb")` for line reads); a missing token file raises `LmmsError("No agent connection file at <path>. In LMMS enable Settings > AI > 'Allow an external agent…' and restart LMMS.")`; connection refused raises `LmmsError` naming the port. `call` sends `{"id": n, "token", "tool", "args"}` with an incrementing id, reads one line, raises `LmmsError(reply["error"])` on `error`, returns `reply["result"]`. `ok` calls `call` and raises `LmmsToolError(result.get("error", "tool failed"))` when `not result.get("ok")`. Context manager support (`__enter__`/`__exit__` → `close`). CLI in `main(argv=None) -> int` with `argparse` subcommands as specified; `call` merges the inline JSON string, `--args-file`, and `-` (stdin) — exactly one source, or none for `{}`; `tools` prints `name — first sentence of description` per line, `--schema` dumps the full array; `summary` prints `get_project_summary`. `if __name__ == "__main__": sys.exit(main())`.
 
-- [ ] **Step 4: Run tests** — all 7 pass.
+- [x] **Step 4: Run tests** — all 7 pass.
 
-- [ ] **Step 5: Commit** — `git add .claude/skills/lmms-composer/scripts/lmmsctl.py .claude/skills/lmms-composer/scripts/test_lmmsctl.py && git commit -m "feat(skill): lmmsctl agent client"`.
+- [x] **Step 5: Commit** — `git add .claude/skills/lmms-composer/scripts/lmmsctl.py .claude/skills/lmms-composer/scripts/test_lmmsctl.py && git commit -m "feat(skill): lmmsctl agent client"`.
 
 ---
 
@@ -995,15 +995,15 @@ if __name__ == "__main__": unittest.main()
 **Interfaces:**
 - Produces: `analyze(path: Path, bpm: float | None = None, ticks_per_bar: int = 192, bars: int | None = None) -> dict` with keys `channels, sample_rate, duration_s, peak_dbfs, rms_dbfs, clipped_samples, silent_bars (list[int], 1-based, only when bpm given)`; CLI `check_render.py <wav> [--bpm B] [--ticks-per-bar 192] [--bars N]` prints the dict as JSON and exits 1 when `clipped_samples > 0` or the whole file is below −60 dBFS RMS, else 0. Bar length in seconds = `4 * 60 / bpm * (ticks_per_bar / 192)`.
 
-- [ ] **Step 1: Failing tests** — synthesize WAVs with `wave` + `array`/`struct`: (a) 2 s 440 Hz sine at −6 dBFS, 44.1 kHz, 16-bit stereo → `peak_dbfs ≈ −6 ± 0.2`, `clipped_samples == 0`, exit 0; (b) same with 1 000 samples at +32767 → `clipped_samples >= 1000`, exit 1; (c) 4 bars at 120 BPM where bar 3 is silence → `silent_bars == [3]`; (d) all-zero file → exit 1; (e) 24-bit mono file reads without error and reports `channels == 1`.
+- [x] **Step 1: Failing tests** — synthesize WAVs with `wave` + `array`/`struct`: (a) 2 s 440 Hz sine at −6 dBFS, 44.1 kHz, 16-bit stereo → `peak_dbfs ≈ −6 ± 0.2`, `clipped_samples == 0`, exit 0; (b) same with 1 000 samples at +32767 → `clipped_samples >= 1000`, exit 1; (c) 4 bars at 120 BPM where bar 3 is silence → `silent_bars == [3]`; (d) all-zero file → exit 1; (e) 24-bit mono file reads without error and reports `channels == 1`.
 
-- [ ] **Step 2: Run to see failure** — `python -m unittest test_check_render -v` → import error.
+- [x] **Step 2: Run to see failure** — `python -m unittest test_check_render -v` → import error.
 
-- [ ] **Step 3: Implement** — stdlib `wave` for 16-bit; for 24-bit unpack 3-byte little-endian manually; 32-bit via `array('i')`. RMS over the whole file and per bar; `−inf` reported as `-120.0`. Clipped = samples equal to the type's max or min. `main(argv) -> int`.
+- [x] **Step 3: Implement** — stdlib `wave` for 16-bit; for 24-bit unpack 3-byte little-endian manually; 32-bit via `array('i')`. RMS over the whole file and per bar; `−inf` reported as `-120.0`. Clipped = samples equal to the type's max or min. `main(argv) -> int`.
 
-- [ ] **Step 4: Run tests** — pass.
+- [x] **Step 4: Run tests** — pass.
 
-- [ ] **Step 5: Commit** — `git add .claude/skills/lmms-composer/scripts/check_render.py .claude/skills/lmms-composer/scripts/test_check_render.py && git commit -m "feat(skill): render sanity check"`.
+- [x] **Step 5: Commit** — `git add .claude/skills/lmms-composer/scripts/check_render.py .claude/skills/lmms-composer/scripts/test_check_render.py && git commit -m "feat(skill): render sanity check"`.
 
 ---
 
@@ -1015,13 +1015,13 @@ if __name__ == "__main__": unittest.main()
 **Interfaces:**
 - Produces: CLI `fetch_soundfont.py [--dest DIR] [--force]`; prints the absolute `.sf2` path on success; exit 0. Default dest: `<workingdir>/samples/soundfonts/` with the working directory resolved like `lmmsctl.token_file_path()` (import `lmmsctl` from the same directory).
 
-- [ ] **Step 1: Research the download** — the official source is S. Christian Collins's GitHub repository `mrbumpy409/GeneralUser-GS` (current release 2.0.3). Find the direct URL of the `.sf2` (a GitHub release asset or the raw file), download it once by hand, and record its SHA-256 and byte size in the script as constants `URL`, `SHA256`, `SIZE`, `VERSION`, `FILENAME = "GeneralUser-GS.sf2"`. Also locate the licence text in the repository (`documentation/LICENSE.txt` or equivalent) and record its URL as `LICENSE_URL`.
+- [x] **Step 1: Research the download** — the official source is S. Christian Collins's GitHub repository `mrbumpy409/GeneralUser-GS` (current release 2.0.3). Find the direct URL of the `.sf2` (a GitHub release asset or the raw file), download it once by hand, and record its SHA-256 and byte size in the script as constants `URL`, `SHA256`, `SIZE`, `VERSION`, `FILENAME = "GeneralUser-GS.sf2"`. Also locate the licence text in the repository (`documentation/LICENSE.txt` or equivalent) and record its URL as `LICENSE_URL`.
 
-- [ ] **Step 2: Implement** — `urllib.request` with a progress line every 5 %; download to `<dest>/<FILENAME>.part`, verify SHA-256, rename; fetch the licence to `<dest>/GeneralUser-GS-LICENSE.txt`; if the target exists and its SHA-256 matches, print the path and exit without downloading (unless `--force`). Non-matching checksum → delete the part file, exit 3 with a message. `main(argv) -> int`.
+- [x] **Step 2: Implement** — `urllib.request` with a progress line every 5 %; download to `<dest>/<FILENAME>.part`, verify SHA-256, rename; fetch the licence to `<dest>/GeneralUser-GS-LICENSE.txt`; if the target exists and its SHA-256 matches, print the path and exit without downloading (unless `--force`). Non-matching checksum → delete the part file, exit 3 with a message. `main(argv) -> int`.
 
-- [ ] **Step 3: Verify** — run it into a temp `--dest`; it downloads, verifies, prints the path; run again: "already present", no download. Run `fluidsynth`-free sanity: the file starts with bytes `RIFF` and contains `sfbk` at offset 8.
+- [x] **Step 3: Verify** — run it into a temp `--dest`; it downloads, verifies, prints the path; run again: "already present", no download. Run `fluidsynth`-free sanity: the file starts with bytes `RIFF` and contains `sfbk` at offset 8.
 
-- [ ] **Step 4: Commit** — `git add .claude/skills/lmms-composer/scripts/fetch_soundfont.py && git commit -m "feat(skill): GeneralUser GS fetcher"`.
+- [x] **Step 4: Commit** — `git add .claude/skills/lmms-composer/scripts/fetch_soundfont.py && git commit -m "feat(skill): GeneralUser GS fetcher"`.
 
 ---
 
@@ -1033,7 +1033,7 @@ if __name__ == "__main__": unittest.main()
 **Interfaces:**
 - Consumes: the tool list — the 29 registered in `src/core/ai/AiProjectTools.cpp`, `AiDiscoveryTools.cpp`, `AiActionTools.cpp` (read their `r.add({…})` descriptions and schemas), plus `ping`, `list_tools`, `checkpoint`, `revert`, `commit`, `add_sf2_track` as specified in Task 1's Interfaces; the CLI shape from Task 5's Interfaces; `check_render.py` and `fetch_soundfont.py` CLIs from Tasks 6–7.
 
-- [ ] **Step 1: `SKILL.md`** — frontmatter:
+- [x] **Step 1: `SKILL.md`** — frontmatter:
 
 ```yaml
 ---
@@ -1044,31 +1044,31 @@ description: Use whenever the user asks to create, edit, arrange, mix, or render
 
 Body sections, in this order, each concrete (commands, tool names, numbers): **Connect** (token file, `lmmsctl.py tools`, what to tell the user when it is missing, how to start LMMS with the process supervisor: `hub start name=lmms application=C:/git_repos/lmms/build/lmms.exe ready.log="AiAgentServer: listening"`); **Research first** (for a named song/artist: tempo, key, progression per section, form with bar counts, instrumentation, feel — via `web_search`, at least two sources, state the findings with sources before touching the project; for a genre/mood: pick from `theory.md`'s recipes and say so; never guess a named song's tempo or key; melodies are written from that research and by ear, not transcribed note-for-note); **Build order** (`checkpoint` → `get_project_summary` → `set_head` → palette → sections with `add_clips` → mix → verify); **Palette** (SoundFont first: `fetch_soundfont.py` once, `add_sf2_track` with patches from `theory.md`; LMMS synths when the style is synth-native; one track per role; kit on bank 128); **Writing parts** (per-song build script pattern using `from lmmsctl import Lmms` — a 20-line example that builds a 4-bar drum pattern and a bass line with helper functions `bar(n)`, `beat(b)`, `chord(root, kind)`); **Mix discipline** (levels: drums 100, bass 90, chords 70, lead 85; pan hats/keys slightly; reverb only on pads/keys/leads and ≤ 25 % wet — check the ReverbSC parameter names with `describe_model_tree` first; drums and bass dry; no effect without a stated purpose; `add_effect` compressor on channel 0 only if peaks clip); **Verify** (`render` to `<workingdir>/renders/<name>.wav`, `check_render.py --bpm`, fix silent bars/clipping, `get_project_summary`); **Hand over** (`commit` or `revert`; `save` when asked; report the section map and one line per track; offer to share the render). Keep the whole file under 250 lines.
 
-- [ ] **Step 2: `references/theory.md`** — migrate the music-theory and genre-recipe content from the former `data/ai/system_prompt.md` (available in git history at `git show a929195ee:data/ai/system_prompt.md`) with these corrections: keys are MIDI numbers (A4 = 69, C4 = 60); instrument base note defaults to 69 — never write `basenote="57"`; remove every mention of "basenote 57". Add a **GM patch table** for `add_sf2_track` (bank 0): 0 Acoustic Grand, 1 Bright Piano, 4 Electric Piano 1, 5 Electric Piano 2, 16 Drawbar Organ, 24 Nylon Guitar, 25 Steel Guitar, 26 Jazz Guitar, 27 Clean Guitar, 28 Muted Guitar, 29 Overdriven Guitar, 30 Distortion Guitar, 32 Acoustic Bass, 33 Finger Bass, 34 Pick Bass, 35 Fretless, 38 Synth Bass 1, 40 Violin, 42 Cello, 48 String Ensemble, 49 Slow Strings, 52 Choir Aahs, 56 Trumpet, 61 Brass Section, 65 Alto Sax, 73 Flute, 80 Square Lead, 81 Saw Lead, 88 New Age Pad, 89 Warm Pad; bank 128: patch 0 Standard Kit, 8 Room, 16 Power, 24 Electronic, 25 TR-808, 32 Jazz, 40 Brush. **GM drum map**: 35/36 kick, 37 side stick, 38 snare, 39 clap, 40 snare 2, 41 low tom, 42 closed hat, 44 pedal hat, 45 mid tom, 46 open hat, 48 high tom, 49 crash, 51 ride, 53 ride bell, 54 tambourine, 56 cowbell. Ticks table, scale/chord/progression tables, velocity guidance, and the genre recipes rewritten to name SoundFont patches where a real instrument fits.
+- [x] **Step 2: `references/theory.md`** — migrate the music-theory and genre-recipe content from the former `data/ai/system_prompt.md` (available in git history at `git show a929195ee:data/ai/system_prompt.md`) with these corrections: keys are MIDI numbers (A4 = 69, C4 = 60); instrument base note defaults to 69 — never write `basenote="57"`; remove every mention of "basenote 57". Add a **GM patch table** for `add_sf2_track` (bank 0): 0 Acoustic Grand, 1 Bright Piano, 4 Electric Piano 1, 5 Electric Piano 2, 16 Drawbar Organ, 24 Nylon Guitar, 25 Steel Guitar, 26 Jazz Guitar, 27 Clean Guitar, 28 Muted Guitar, 29 Overdriven Guitar, 30 Distortion Guitar, 32 Acoustic Bass, 33 Finger Bass, 34 Pick Bass, 35 Fretless, 38 Synth Bass 1, 40 Violin, 42 Cello, 48 String Ensemble, 49 Slow Strings, 52 Choir Aahs, 56 Trumpet, 61 Brass Section, 65 Alto Sax, 73 Flute, 80 Square Lead, 81 Saw Lead, 88 New Age Pad, 89 Warm Pad; bank 128: patch 0 Standard Kit, 8 Room, 16 Power, 24 Electronic, 25 TR-808, 32 Jazz, 40 Brush. **GM drum map**: 35/36 kick, 37 side stick, 38 snare, 39 clap, 40 snare 2, 41 low tom, 42 closed hat, 44 pedal hat, 45 mid tom, 46 open hat, 48 high tom, 49 crash, 51 ride, 53 ride bell, 54 tambourine, 56 cowbell. Ticks table, scale/chord/progression tables, velocity guidance, and the genre recipes rewritten to name SoundFont patches where a real instrument fits.
 
-- [ ] **Step 3: `references/tools.md`** — one `###` section per tool (35), grouped as Meta / Project / Convenience / Discovery / Actions, each: purpose, args (name, type, required?, meaning), result fields, gotchas taken from the descriptions in the source. State at the top that `lmmsctl.py tools --schema` is the authoritative schema and this file is the readable companion.
+- [x] **Step 3: `references/tools.md`** — one `###` section per tool (35), grouped as Meta / Project / Convenience / Discovery / Actions, each: purpose, args (name, type, required?, meaning), result fields, gotchas taken from the descriptions in the source. State at the top that `lmmsctl.py tools --schema` is the authoritative schema and this file is the readable companion.
 
-- [ ] **Step 4: Check** — `python - <<'EOF'` that parses the frontmatter of `SKILL.md` (starts with `---`, has `name:` and `description:`); count of `###` headings in `tools.md` is 35; `grep -c 'basenote="57"' references/*.md SKILL.md` is 0.
+- [x] **Step 4: Check** — `python - <<'EOF'` that parses the frontmatter of `SKILL.md` (starts with `---`, has `name:` and `description:`); count of `###` headings in `tools.md` is 35; `grep -c 'basenote="57"' references/*.md SKILL.md` is 0.
 
-- [ ] **Step 5: Commit** — `git add .claude/skills/lmms-composer && git commit -m "feat(skill): lmms-composer skill and references"`.
+- [x] **Step 5: Commit** — `git add .claude/skills/lmms-composer && git commit -m "feat(skill): lmms-composer skill and references"`.
 
 ---
 
 ### Task 9: Integration (controller)
 
-- [ ] **Step 1: Merge Lane B** — on `ai-composer`: `git merge harness-removal`. Resolve conflicts in `src/core/CMakeLists.txt` / `tests/CMakeLists.txt` by keeping Lane A's additions and Lane B's removals; `GuiApplication.cpp` keep both hunks.
-- [ ] **Step 2: Dispatch Task 4.**
-- [ ] **Step 3: Full build** — `cmake build && rm -f build/src/lmmsobjs_autogen/timestamp && cmake --build build`.
-- [ ] **Step 4: All tests** — every `build/tests/*.exe -o <file>,txt`; 8 upstream + `AiPathPolicyTest AiToolRegistryTest AiProjectToolsTest AiActionToolsTest AiAgentServerTest` pass. `build/lmms.exe render tests/emptyproject.mmp -o /tmp/empty.wav` exits 0.
-- [ ] **Step 5: Python tests** — `python -m unittest discover -s .claude/skills/lmms-composer/scripts -p 'test_*.py'`.
-- [ ] **Step 6: Spec status** — add `Status: superseded by 2026-09-29-agent-harness-design.md` under the date line of the 2026-09-16 spec; commit `docs: mark AI composer spec superseded`.
+- [x] **Step 1: Merge Lane B** — on `ai-composer`: `git merge harness-removal`. Resolve conflicts in `src/core/CMakeLists.txt` / `tests/CMakeLists.txt` by keeping Lane A's additions and Lane B's removals; `GuiApplication.cpp` keep both hunks.
+- [x] **Step 2: Dispatch Task 4.**
+- [x] **Step 3: Full build** — `cmake build && rm -f build/src/lmmsobjs_autogen/timestamp && cmake --build build`.
+- [x] **Step 4: All tests** — every `build/tests/*.exe -o <file>,txt`; 8 upstream + `AiPathPolicyTest AiToolRegistryTest AiProjectToolsTest AiActionToolsTest AiAgentServerTest` pass. `build/lmms.exe render tests/emptyproject.mmp -o /tmp/empty.wav` exits 0.
+- [x] **Step 5: Python tests** — `python -m unittest discover -s .claude/skills/lmms-composer/scripts -p 'test_*.py'`.
+- [x] **Step 6: Spec status** — add `Status: superseded by 2026-09-29-agent-harness-design.md` under the date line of the 2026-09-16 spec; commit `docs: mark AI composer spec superseded`.
 
 ### Task 10: Smoke — make music the user can hear (controller, using the skill)
 
-- [ ] **Step 1** — Enable the setting (or write `<ai agentserver="1"/>` into `.lmmsrc.xml`), start `build/lmms.exe` via `hub start` with `ready.log "AiAgentServer: listening"`.
-- [ ] **Step 2** — `fetch_soundfont.py`; `lmmsctl.py tools` lists 35 tools.
-- [ ] **Step 3** — Following `SKILL.md`: `checkpoint`; 16 bars at a researched tempo/key of a simple, well-known progression; tracks: drum kit (bank 128), finger bass, clean guitar or piano chords, a lead; `render` to `<workingdir>/renders/agent-smoke.ogg` (and `.wav` for `check_render.py`); `check_render.py --bpm` clean; `save` to `<workingdir>/projects/agent-smoke.mmp`; `commit`.
-- [ ] **Step 4** — Hand the render to the user (`xd://share_to_telegram` with the `.ogg`, plus the local path). Success criterion is the user's ear.
+- [x] **Step 1** — Enable the setting (or write `<ai agentserver="1"/>` into `.lmmsrc.xml`), start `build/lmms.exe` via `hub start` with `ready.log "AiAgentServer: listening"`.
+- [x] **Step 2** — `fetch_soundfont.py`; `lmmsctl.py tools` lists 35 tools.
+- [x] **Step 3** — Following `SKILL.md`: `checkpoint`; 16 bars at a researched tempo/key of a simple, well-known progression; tracks: drum kit (bank 128), finger bass, clean guitar or piano chords, a lead; `render` to `<workingdir>/renders/agent-smoke.ogg` (and `.wav` for `check_render.py`); `check_render.py --bpm` clean; `save` to `<workingdir>/projects/agent-smoke.mmp`; `commit`.
+- [x] **Step 4** — Hand the render to the user (`xd://share_to_telegram` with the `.ogg`, plus the local path). Success criterion is the user's ear.
 
 ### Task 11: Docs sync (controller)
 

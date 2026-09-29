@@ -2,8 +2,8 @@
   "version": 1,
   "repo": "lmms",
   "bootstrappedAt": "2026-09-16",
-  "lastSyncedCommit": "a929195ee67866e5ee1d3c7744609a7fd868f220",
-  "lastSyncedRange": "c2eef81054338a17f19dcbe01d14d9185a8986c1..a929195ee67866e5ee1d3c7744609a7fd868f220",
+  "lastSyncedCommit": "c5bb4e5a9",
+  "lastSyncedRange": "a929195ee67866e5ee1d3c7744609a7fd868f220..c5bb4e5a9",
   "fenceFormat": {
     "open": "<!-- claude:auto:<slug> -->",
     "close": "<!-- /claude:auto:<slug> -->"
@@ -12,7 +12,8 @@
     {
       "path": "CLAUDE.md",
       "created": "2026-09-16",
-      "tracked": false,
+      "tracked": true,
+      "trackedSince": "the agent-harness range; CLAUDE.md and all of .claude/ were committed in a929195ee..047bd874e and are no longer working-tree-only",
       "slugs": [
         "project-structure",
         "build-and-test",
@@ -23,6 +24,7 @@
     {
       "path": ".claude/context/PROJECT_CONTEXT.md",
       "ownership": "full",
+      "tracked": true,
       "slugs": []
     }
   ],
@@ -34,37 +36,50 @@
     },
     {
       "path": ".gitignore",
-      "reason": "bootstrap ignore requirement already satisfied by .claude/context/.gitignore (ledger.jsonl, .baseline.json, .sync-state.json, *.tmp); root .gitignore is upstream-tracked and was left untouched"
+      "reason": "bootstrap ignore requirement satisfied by .claude/context/.gitignore (ledger.jsonl, .baseline.json, .sync-state.json, *.tmp) and .claude/skills/lmms-composer/scripts/.gitignore (__pycache__/); the root .gitignore is upstream-tracked and was left untouched"
     },
     {
-      "path": ".superpowers/sdd/2026-09-16-ai-composer/",
-      "reason": "orchestrator-owned SDD run state (progress.md, task-N-report.md, review-*.diff, screenshots). Read for evidence and rulings; never written by the steward. Untracked by git in this repo.",
+      "path": ".claude/skills/lmms-composer/**",
+      "reason": "agent-authored skill content owned by its implementing task, not steward-managed. Read it for evidence (tool count, frontmatter, token-file rule); never rewrite it. A drift between its 35 tool sections and the registry is a reported finding, not a steward edit.",
+      "revisitIf": "the user asks the steward to own the skill's docs"
+    },
+    {
+      "path": ".superpowers/sdd/",
+      "reason": "orchestrator-owned SDD run state (progress.md, task-N-brief.md, task-N-report.md, task-N-review.md). Read for evidence and rulings; never written by the steward. Untracked by git in this repo. Holds both the 2026-09-16-ai-composer and 2026-09-29-agent-harness runs.",
       "revisitIf": "never"
     }
   ],
   "specs": [
     {
       "path": "docs/superpowers/specs/2026-09-29-agent-harness-design.md",
-      "status": "GOVERNING as of a929195ee (2026-09-29), 269 lines, the entire content of the c2eef8105..a929195ee range. Header :4-5 = 'Status: approved design, pending implementation plan' + 'Supersedes: 2026-09-16-ai-composer-design.md'. Implementation NOT started, verified by absence: AiAgentServer, AiProjectSnapshot and registerAiMetaTools appear nowhere under include/, src/ or tests/, and .claude/skills/lmms-composer/ does not exist. No plan doc derived from it yet. Scope: remove the in-process LLM loop, chat panel and provider settings; keep AiToolRegistry + the 29 tools + AiPathPolicy (minus allowFromUserText); add AiAgentServer (NDJSON over loopback TCP, ephemeral port, per-launch token file), AiProjectSnapshot, and 6 tools (ping, list_tools, checkpoint, revert, commit, add_sf2_track) for 35 total; add the repo-local skill .claude/skills/lmms-composer/ with lmmsctl.py, fetch_soundfont.py, check_render.py. Its stated cause verified this sync: data/ai/system_prompt.md:18,66 do say basenote=57 while include/Note.h:93 defines DefaultBaseKey = Octave_4 + Key::A (69).",
+      "status": "GOVERNING and IMPLEMENTED as of c5bb4e5a9 (2026-09-30). Everything it specifies exists: AiAgentServer (include/AiAgentServer.h, src/core/ai/AiAgentServer.cpp), AiProjectSnapshot, registerAiMetaTools (src/core/ai/AiMetaTools.cpp), add_sf2_track, 35 registered tools, .claude/skills/lmms-composer/ with lmmsctl.py + check_render.py + fetch_soundfont.py, and the single ai/agentserver setting. Its own header :4 is STALE - still 'Status: approved design, pending implementation plan'. Prose outside a fence in a spec doc, so the steward cannot fix it; raised for the author, exactly as 835de8f83 did for the 2026-09-16 spec.",
       "governing": true,
-      "taskState": "none - prose design doc, no checkboxes and no per-item 'status:' lines (the single 'Status:' at :4 is front matter for the whole doc, not task state). Nothing to flip this range.",
+      "taskState": "none - prose design doc, no checkboxes and no per-item 'status:' lines. The single 'Status:' at :4 is front matter for the whole doc, not task state, and is not the steward's to flip.",
       "firstSeen": "a929195ee67866e5ee1d3c7744609a7fd868f220"
     },
     {
+      "path": "docs/superpowers/plans/2026-09-29-agent-harness.md",
+      "status": "IMPLEMENTED. 11 tasks, 59 step boxes, 58 flipped to [x] by this sync on commit + file + controller-ledger evidence. The single open box is line 1075, Task 11's own 'dispatch the context-steward over the full range; relay its report' - the relay is the controller's act, not the steward's, so it was deliberately left for Main. No task text altered anywhere.",
+      "governing": false,
+      "derivedFrom": "docs/superpowers/specs/2026-09-29-agent-harness-design.md",
+      "taskState": "59 boxes / 58 [x] / 1 open (line 1075). Evidence per task: T1 d4f1ae2ad..ef7c416b2, T2 226d610f7+25951a958, T3 635b0210b..a71d14163 (merged 5f8500510), T4 58f061cc9, T5 878b42c8e, T6 acd72666f+63f398c8c, T7 6f52c25ee, T8 70df120e1, T9 progress.md:52 + spec line 835de8f83, T10 progress.md:53 confirmed live by Main.",
+      "firstSeen": "048c2cf95"
+    },
+    {
       "path": "docs/superpowers/specs/2026-09-16-ai-composer-design.md",
-      "status": "SUPERSEDED by 2026-09-29-agent-harness-design.md - but only in the new doc's text. This file is UNCHANGED by the range and still reads 'Status: approved design, pending implementation plan' at :4, with no supersede marker, which the new spec's own section 8 (:265-266) asks for. Raised as above floor 2026-09-29; the steward cannot make that edit because it is prose outside any fence in a spec doc. Otherwise accurate: 253 lines, implemented, reconciled through c2eef8105 (150-call cap, DataFile snapshot turn, section 2 tool table all verified faithful 2026-09-17). Treat as history, not a build target.",
+      "status": "SUPERSEDED, and now marked so in the file itself at :4 by commit 835de8f83 - the open question two syncs carried is CLOSED. History, not a build target: the chat panel, OpenAI client, stream parser, session and prompt builder it describes are all deleted. Its section 2 tool table still describes the retained tool layer.",
       "governing": false,
       "supersededBy": "docs/superpowers/specs/2026-09-29-agent-harness-design.md",
       "taskState": "none - prose design doc, no checkboxes or status: lines",
       "firstSeen": "88957be34313162993caf477eb67069ccde8058c",
-      "dispatchPathMismatch": "dispatches have four times named docs/superpowers/specs/2026-09-16-ai-composer.md; that file does not exist, the -design suffix is the real path"
+      "dispatchPathMismatch": "dispatches have repeatedly named docs/superpowers/specs/2026-09-16-ai-composer.md; that file does not exist, the -design suffix is the real path"
     },
     {
       "path": "docs/superpowers/plans/2026-09-16-ai-composer.md",
-      "status": "CLOSED and now derived from a superseded design. 2304 lines, ALL 60 step boxes [x] since c2eef8105; unchanged by this range. The FixWave (cc47a479, ba8cd48b, f35b31f7) and PersonaWave (5fb7d854) were mid-run user requirements with no task boxes at all, so 60/60 never meant the plan described the product. progress.md:78 still records only 'Task 13 steps 1-3: complete', one step behind the file.",
+      "status": "CLOSED at 60/60 since c2eef8105 and now derived from a superseded design. Untouched by this range. Historical only.",
       "governing": false,
       "derivedFrom": "docs/superpowers/specs/2026-09-16-ai-composer-design.md",
-      "taskState": "13 tasks, 60 step boxes, 60 flipped, 0 remaining, unchanged at a929195ee. No 'status:' lines. The line 3 prose mention of '- [ ]' is not a task box.",
+      "taskState": "13 tasks, 60 step boxes, 60 flipped, 0 remaining.",
       "firstSeen": "653a00c300165e44314ad01f819fd02af482da4c"
     }
   ],
@@ -74,13 +89,15 @@
   ],
   "notes": [
     "Fork: origin=JakeyHwang/lmms, upstream=lmms/lmms. Prefer agent-managed content in CLAUDE.md and .claude/context/ over upstream-tracked files.",
-    "CLAUDE.md and .claude/ are both untracked in git. Steward edits to CLAUDE.md and to the tracked plan doc are working-tree only; the steward never commits, and the 2026-09-16 flips were already lost once that way. Ask the orchestrator to commit doc flips.",
-    "2026-09-29 ABOVE FLOOR, carried: the working tree holds 13 modified tracked files (+212/-13) in NO commit - AiConfig(.h/.cpp), SetupDialog(.h/.cpp), OpenAiStreamParser(.h/.cpp), OpenAiClient.cpp, AiSession.cpp, AiChatView.cpp, ai_mock_server.py and the AiSession/OpenAiClient/OpenAiStreamParser tests - adding maxTokens + disableThinking settings. NINE of them are on the harness design's Removed list (:62-73). Starting the cutover destroys uncommitted work. The ledger attributes none of it (last code entries 2026-09-17; 2026-09-29 records only the three writes that created the new spec), so it is the user's or an unledgered session's.",
-    "2026-09-29: the harness design was written against that DIRTY tree, not against HEAD - its AiSession.cpp:206-249 anchor (:145-146) is +9 off from HEAD, where beginTurnCheckpoint is :197 and revertLastTurn :219. Its Removed list also names AiConfig fields maxTokens/disableThinking and keys ai/maxtokens, ai/disablethinking that exist ONLY in the uncommitted diff, never at HEAD.",
-    "2026-09-29: the render-blocking deviation is CLOSED, not carried. The nested loop.exec at src/core/ai/AiActionTools.cpp:130-134 is now the APPROVED behaviour per harness design section 6 (:229-230). Do not re-raise it. The remaining old-design deviation is Song-Editor scroll-to-track (2026-09-16 design :197-198), never implemented and not carried forward by the harness design - it lapsed without a decision, and the Song Editor survives the cutover, so it is not moot.",
-    "Test-run and GUI evidence never appears in a diff: it lives in .superpowers/sdd/2026-09-16-ai-composer/. Read-only for the steward. The PersonaWave (5fb7d854) left screenshots but no *-report.md, so its 'ctest 16/16' claim is unverifiable; the last recorded full run is the FixWave's (progress.md:73,76,78). The uncommitted tree changes have no recorded run at all.",
-    "Verify a claimed checkbox flip against the file, never against a Recent-changes line - the 2026-09-16 sync recorded 10 flips the file never held.",
-    "Shortcut-availability checks must grep the editors' keyPressEvent switches, not just existing setShortcut calls: a MainWindow QAction has Qt::WindowShortcut context and pre-empts MDI children, and PianoRoll.cpp:1453/SongEditor.cpp:511 test 'modifiers() & Qt::ControlModifier' non-exclusively. Ctrl+Alt+A frees up only when AiChatView is deleted.",
-    "2026-09-29 path sweep: every file, directory and command path in CLAUDE.md and PROJECT_CONTEXT.md resolves. Nothing pruned. .claude/skills/lmms-composer/ is a forward reference in the new spec and is correctly absent - do not prune it as a dead path. tests/CMakeLists.txt:6-24 still holds 16 entries; src/core/ai/ still holds 11 files."
+    "2026-09-30: CLAUDE.md and .claude/ are now TRACKED (committed inside the harness range). The old note that steward edits were working-tree-only no longer applies, but the steward still never commits on its own initiative - this sync committed only because the dispatch explicitly asked for 'docs: sync context for agent harness'.",
+    "2026-09-30 CLOSED: the previous sync's above-floor item about 13 uncommitted tracked files is resolved. That work was committed as 95d161900 ('wip(ai): LLM client max_tokens / thinking options') before 635b0210b deleted the files, so nothing was destroyed silently.",
+    "2026-09-30 CLOSED: the 2026-09-16 spec now carries its supersede marker (835de8f83). Do not re-raise.",
+    "2026-09-30 CARRIED, above floor: Song-Editor scroll-to-track. The 2026-09-16 design section 4 (:197-198) promised tools that add a track scroll the Song Editor to it; never implemented (the only SongEditor use under src/core/ai/ is moveTrackView for replace_track positioning, AiProjectTools.cpp:428) and the harness design does not carry it forward. The Song Editor survived the cutover, so it is a dropped agreed requirement, not a moot one.",
+    "2026-09-30: the render-blocking nested loop.exec at src/core/ai/AiActionTools.cpp:130-134 is APPROVED behaviour per harness design section 6. Never re-raise it as a deviation.",
+    "Two controller rulings deviate from the harness design and are recorded at .superpowers/sdd/2026-09-29-agent-harness/progress.md:54-55: lmmsctl.py resolves the token file from a candidate list (env, ~/.lmmsrc.xml workingdir, ~/Documents/lmms, ~/OneDrive/Documents/lmms, ~/lmms) rather than one path, because a dev build keeps .lmmsrc.xml beside the executable (ConfigManager::initDevelopmentWorkingDir, src/core/ConfigManager.cpp:717); and fetch_soundfont.py defaults its destination to lmmsctl.working_dir() because the SoundFont must sit under an AiPathPolicy root.",
+    "Test-run and GUI evidence never appears in a diff: it lives in .superpowers/sdd/<run>/. Read-only for the steward. The harness run's ledger records 13/13 C++ tests, 13 Python tests, headless render rc=0 (progress.md:52) and the live smoke (progress.md:53).",
+    "Verify a claimed checkbox flip against the file, never against a Recent-changes line - the 2026-09-16 sync once recorded 10 flips the file never held.",
+    "Shortcut-availability checks must grep the editors' keyPressEvent switches, not just existing setShortcut calls: a MainWindow QAction has Qt::WindowShortcut context and pre-empts MDI children, and PianoRoll.cpp:1453 / SongEditor.cpp:511 test 'modifiers() & Qt::ControlModifier' non-exclusively. Ctrl+Alt+A is FREE again as of 635b0210b.",
+    "2026-09-30 path sweep: every file, directory and command path named in CLAUDE.md and PROJECT_CONTEXT.md resolves against the tree at c5bb4e5a9. Ten dead paths pruned (AiChatView.h/.cpp, AiClient.h, AiSession.h/.cpp, AiPromptBuilder.h/.cpp, OpenAiClient.h/.cpp, OpenAiStreamParser.h/.cpp, data/ai/*, ai_mock_server.py, the four deleted AI tests). src/core/ai/ now holds 10 entries; tests/CMakeLists.txt holds 13."
   ]
 }
