@@ -90,6 +90,9 @@ public:
 	MicrotunerConfig* getMicrotunerConfig() { return m_microtunerConfig; }
 	AutomationEditorWindow* automationEditor() { return m_automationEditor; }
 	ControllerRackView* getControllerRackView() { return m_controllerRackView; }
+	//! Starts the loopback agent server when Settings > AI allows it. Call once the initial
+	//! project has been loaded or created; a no-op when disabled or already running.
+	void startAgentServer();
 
 	//! File descriptors for unix socketpair, used to receive SIGINT
 	static inline int s_sigintFd[2];

@@ -433,9 +433,26 @@ static void moveTrackTo(Track* track, int index)
 	Engine::getSong()->moveTrack(track, index);
 }
 
-//! ~Track unlinks itself from the container and closes its view; the audio engine must be paused for it.
+//! With a GUI the view must go before the model: ~InstrumentTrackView tears down the instrument
+//! window and MIDI-port menus through model(), so deleting the Track first leaves the view (closed
+//! by destroyedTrack, destroyed on the next event loop pass) reading freed memory. The song
+//! editor's deleteTrackView does view-then-track under the audio-engine change lock; headless,
+//! ~Track unlinks itself from the container and the lock is taken here.
 static void deleteTrack(Track* track)
 {
+	if (auto g = gui::getGUI(); g && g->songEditor())
+	{
+		QCoreApplication::sendPostedEvents(); // a view queued by trackAdded may not exist yet
+		auto editor = g->songEditor()->m_editor;
+		for (auto view : editor->trackViews())
+		{
+			if (view->getTrack() == track)
+			{
+				editor->deleteTrackView(view);
+				return;
+			}
+		}
+	}
 	auto guard = Engine::audioEngine()->requestChangesGuard();
 	delete track;
 }

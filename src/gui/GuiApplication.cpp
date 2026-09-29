@@ -198,44 +198,48 @@ GuiApplication::GuiApplication()
 	m_automationEditor = new AutomationEditorWindow;
 	connect(m_automationEditor, SIGNAL(destroyed(QObject*)), this, SLOT(childDestroyed(QObject*)));
 
-	if (AiConfig::load().agentServer)
-	{
-		displayInitProgress(tr("Starting agent server"));
-		auto cm = ConfigManager::inst();
-		QStringList roots;
-		for (const auto& dir : {cm->dataDir(), cm->workingDir(), cm->factoryPresetsDir(), cm->userPresetsDir(),
-				cm->factorySamplesDir(), cm->userSamplesDir()})
-		{
-			if (!dir.isEmpty()) { roots << QDir(dir).absolutePath(); }
-		}
-		m_agentPolicy.setRoots(roots);
-		auto pathAllowed = [this](const QString& p) {
-			// The project directory can change with every open/save, so it is checked live.
-			const QString& projectFile = Engine::getSong()->projectFileName();
-			if (!projectFile.isEmpty())
-			{
-				AiPathPolicy withProject = m_agentPolicy;
-				withProject.setRoots(m_agentPolicy.roots() << QFileInfo(projectFile).absolutePath());
-				return withProject.allows(p);
-			}
-			return m_agentPolicy.allows(p);
-		};
-		registerAiProjectTools(m_agentRegistry, pathAllowed);
-		registerAiDiscoveryTools(m_agentRegistry, m_agentPolicy);
-		registerAiActionTools(m_agentRegistry, pathAllowed);
-		registerAiMetaTools(m_agentRegistry, m_agentSnapshot);
-		m_agentServer = new AiAgentServer(this);
-		m_agentServer->start(&m_agentRegistry, AiAgentServer::defaultTokenFilePath());
-		// main.cpp never deletes the GuiApplication, so the server's destructor does not run at
-		// exit: the token file has to be removed on the way out of exec() instead.
-		connect(qApp, &QCoreApplication::aboutToQuit, m_agentServer, &AiAgentServer::stop);
-	}
-
 	splashScreen.finish(m_mainWindow);
 	m_mainWindow->finalize();
 
 	m_loadingProgressLabel = nullptr;
 }
+
+// Called from main() once the initial project exists. Starting any earlier would let an agent
+// mutate the song while the recovery dialog spins its nested event loop and before
+// createNewProject()/loadProject() has run — tracks removed then are deleted under project setup.
+void GuiApplication::startAgentServer()
+{
+	if (m_agentServer || !AiConfig::load().agentServer) { return; }
+	auto cm = ConfigManager::inst();
+	QStringList roots;
+	for (const auto& dir : {cm->dataDir(), cm->workingDir(), cm->factoryPresetsDir(), cm->userPresetsDir(),
+			cm->factorySamplesDir(), cm->userSamplesDir()})
+	{
+		if (!dir.isEmpty()) { roots << QDir(dir).absolutePath(); }
+	}
+	m_agentPolicy.setRoots(roots);
+	auto pathAllowed = [this](const QString& p) {
+		// The project directory can change with every open/save, so it is checked live.
+		const QString& projectFile = Engine::getSong()->projectFileName();
+		if (!projectFile.isEmpty())
+		{
+			AiPathPolicy withProject = m_agentPolicy;
+			withProject.setRoots(m_agentPolicy.roots() << QFileInfo(projectFile).absolutePath());
+			return withProject.allows(p);
+		}
+		return m_agentPolicy.allows(p);
+	};
+	registerAiProjectTools(m_agentRegistry, pathAllowed);
+	registerAiDiscoveryTools(m_agentRegistry, m_agentPolicy);
+	registerAiActionTools(m_agentRegistry, pathAllowed);
+	registerAiMetaTools(m_agentRegistry, m_agentSnapshot);
+	m_agentServer = new AiAgentServer(this);
+	m_agentServer->start(&m_agentRegistry, AiAgentServer::defaultTokenFilePath());
+	// main.cpp never deletes the GuiApplication, so the server's destructor does not run at
+	// exit: the token file has to be removed on the way out of exec() instead.
+	connect(qApp, &QCoreApplication::aboutToQuit, m_agentServer, &AiAgentServer::stop);
+}
+
 
 GuiApplication::~GuiApplication()
 {

@@ -910,6 +910,9 @@ int main( int argc, char * * argv )
 		{
 			gui::getGUI()->mainWindow()->autoSaveTimerReset();
 		}
+
+		// The project now exists; only now may an external agent start editing it.
+		gui::getGUI()->startAgentServer();
 	}
 
 	const int ret = app->exec();
