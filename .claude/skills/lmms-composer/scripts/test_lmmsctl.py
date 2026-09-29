@@ -1,4 +1,5 @@
 import json, os, socket, socketserver, tempfile, threading, unittest
+from unittest import mock
 from pathlib import Path
 import lmmsctl
 
@@ -57,5 +58,17 @@ class LmmsctlTest(unittest.TestCase):
     def test_cli_args_from_file(self):
         f = Path(self.tmp.name) / "args.json"; f.write_text('{"k": 7}')
         self.assertEqual(lmmsctl.main(["call", "echo", "--args-file", str(f)]), 0)
+    def test_env_override_wins(self):
+        self.assertEqual(lmmsctl.token_file_path(), self.file)
+        self.assertEqual(lmmsctl.working_dir(), self.file.parent)
+    def test_falls_back_to_onedrive_documents(self):
+        with tempfile.TemporaryDirectory() as home:
+            found = Path(home) / "OneDrive" / "Documents" / "lmms" / ".lmms-agent.json"
+            found.parent.mkdir(parents=True)
+            found.write_text("{}")
+            env = {k: v for k, v in os.environ.items() if k != "LMMS_AGENT_FILE"}
+            with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(lmmsctl.Path, "home", lambda: Path(home)):
+                self.assertEqual(lmmsctl.token_file_path(), found)
+                self.assertEqual(lmmsctl.working_dir(), found.parent)
 
 if __name__ == "__main__": unittest.main()

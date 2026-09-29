@@ -3,8 +3,11 @@
 
 LMMS listens on a loopback NDJSON socket when
 ``Settings > AI > "Allow an external agent to control LMMS"`` is enabled. The
-port and token are written to ``<workingdir>/.lmms-agent.json``; set
-``LMMS_AGENT_FILE`` to point at a different file.
+port and token are written to ``<workingdir>/.lmms-agent.json``. That file is
+looked for at ``$LMMS_AGENT_FILE``, then in the working directory named by
+``~/.lmmsrc.xml``, then ``~/Documents/lmms``, ``~/OneDrive/Documents/lmms`` and
+``~/lmms`` — a development build keeps its ``.lmmsrc.xml`` beside the
+executable, so the working directory has to be guessed.
 
 Usage:
     python lmmsctl.py tools [--schema]
@@ -39,7 +42,15 @@ import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 from typing import Any
 
-__all__ = ["LmmsError", "LmmsToolError", "token_file_path", "Lmms", "main"]
+__all__ = [
+	"LmmsError",
+	"LmmsToolError",
+	"candidate_token_files",
+	"token_file_path",
+	"working_dir",
+	"Lmms",
+	"main",
+]
 
 #: Name of the connection file LMMS writes inside its working directory.
 AGENT_FILE_NAME = ".lmms-agent.json"
@@ -68,28 +79,63 @@ def _home() -> Path:
 		return Path(fallback) if fallback else Path.cwd()
 
 
-def _working_dir() -> Path:
-	"""LMMS working directory, read from ``~/.lmmsrc.xml`` when it exists."""
-	home = _home()
-	rc_file = home / ".lmmsrc.xml"
+def _rc_working_dir() -> Path | None:
+	"""Working directory named by ``~/.lmmsrc.xml``, when that file exists."""
+	rc_file = _home() / ".lmmsrc.xml"
 	try:
-		if rc_file.is_file():
-			paths = ElementTree.parse(rc_file).getroot().find("paths")
-			if paths is not None:
-				working_dir = paths.get("workingdir")
-				if working_dir:
-					return Path(working_dir)
+		if not rc_file.is_file():
+			return None
+		paths = ElementTree.parse(rc_file).getroot().find("paths")
+		if paths is not None:
+			value = paths.get("workingdir")
+			if value:
+				return Path(value)
 	except (ElementTree.ParseError, OSError):
 		pass
-	return home / "lmms"
+	return None
+
+
+def candidate_token_files() -> list[Path]:
+	"""Every connection file location to try, best guess first.
+
+	A development build keeps its ``.lmmsrc.xml`` next to the executable rather
+	than in ``$HOME``, so the working directory has to be guessed: LMMS defaults
+	it to the Documents folder, which OneDrive may have redirected.
+	"""
+	override = os.environ.get(AGENT_FILE_ENV)
+	if override:
+		return [Path(override)]
+	home = _home()
+	directories = [_rc_working_dir(), home / "Documents" / "lmms", home / "OneDrive" / "Documents" / "lmms", home / "lmms"]
+	candidates: list[Path] = []
+	for directory in directories:
+		if directory is None:
+			continue
+		path = directory / AGENT_FILE_NAME
+		if path not in candidates:
+			candidates.append(path)
+	return candidates
 
 
 def token_file_path() -> Path:
-	"""Path of the connection file LMMS writes when the agent server is on."""
-	override = os.environ.get(AGENT_FILE_ENV)
-	if override:
-		return Path(override)
-	return _working_dir() / AGENT_FILE_NAME
+	"""Path of the connection file LMMS writes when the agent server is on.
+
+	The first candidate that exists wins; with none present the first candidate
+	is returned so the caller can name it in an error message.
+	"""
+	candidates = candidate_token_files()
+	for path in candidates:
+		try:
+			if path.is_file():
+				return path
+		except OSError:
+			continue
+	return candidates[0]
+
+
+def working_dir() -> Path:
+	"""LMMS working directory: the folder holding the connection file."""
+	return token_file_path().parent
 
 
 class Lmms:
@@ -97,6 +143,7 @@ class Lmms:
 
 	def __init__(self, path: Path | None = None, timeout: float = DEFAULT_TIMEOUT) -> None:
 		self._path = Path(path) if path is not None else None
+		self._explicit = path is not None
 		self._timeout = timeout
 		self._token: str | None = None
 		self._socket: socket.socket | None = None
@@ -115,8 +162,10 @@ class Lmms:
 		try:
 			raw = path.read_text(encoding="utf-8")
 		except FileNotFoundError:
+			tried = [path] if self._explicit else candidate_token_files()
+			listing = "\n".join(f"  {candidate}" for candidate in tried)
 			raise LmmsError(
-				f"No agent connection file at {path}. In LMMS enable "
+				"No agent connection file found. Tried:\n" + listing + "\nIn LMMS enable "
 				"Settings > AI > 'Allow an external agent\u2026' and restart LMMS."
 			) from None
 		except OSError as exc:
@@ -222,6 +271,18 @@ def _first_sentence(text: str) -> str:
 	return head + "." if sep else text
 
 
+def _print_tools(schemas: list, schema: bool) -> None:
+	"""One ``name — first sentence`` line per tool, or the raw schema array."""
+	if schema:
+		print(json.dumps(schemas, indent=2))
+		return
+	for entry in schemas:
+		function = entry.get("function", entry) if isinstance(entry, dict) else {}
+		name = function.get("name", "?")
+		description = _first_sentence(function.get("description", ""))
+		print(f"{name} \u2014 {description}" if description else name)
+
+
 def _collect_args(inline: str | None, args_file: str | None) -> dict:
 	"""Read tool arguments from exactly one of: inline JSON, a file, stdin."""
 	if inline is not None and args_file is not None:
@@ -302,18 +363,17 @@ def main(argv: list[str] | None = None) -> int:
 			args = _collect_args(options.args, options.args_file)
 		with Lmms(timeout=options.timeout) as lmms:
 			if options.command == "tools":
-				schemas = lmms.tools()
-				if options.schema:
-					print(json.dumps(schemas, indent=2))
-				else:
-					for entry in schemas:
-						function = entry.get("function", entry) if isinstance(entry, dict) else {}
-						name = function.get("name", "?")
-						description = _first_sentence(function.get("description", ""))
-						print(f"{name} \u2014 {description}" if description else name)
-				return 0
-			tool = "get_project_summary" if options.command == "summary" else options.tool
-			result = lmms.call(tool, {} if options.command == "summary" else args)
+				tool = "list_tools"
+				result = lmms.call(tool)
+				if result.get("ok"):
+					_print_tools(result.get("tools") or [], options.schema)
+					return 0
+			elif options.command == "summary":
+				tool = "get_project_summary"
+				result = lmms.call(tool, {})
+			else:
+				tool = options.tool
+				result = lmms.call(tool, args)
 	except LmmsError as error:
 		print(f"lmmsctl: {error}", file=sys.stderr)
 		return 2
