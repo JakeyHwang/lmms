@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Minimal OpenAI-compatible mock: scripted tool calls, then a final message.
 
-Two scripts, selected with the AI_MOCK_SCRIPT environment variable:
+Three scripts, selected with the AI_MOCK_SCRIPT environment variable:
   drumloop (default) -- a 4-bar drum loop: kicker + oscillator hats with an effect.
   song               -- a short 3-section song (intro/verse/outro) on three tracks,
                         built with add_clips and mixed with set_track.
+  preset             -- list_presets -> get_preset_xml -> add_track with the returned
+                        preset XML, then notes on it. Covers the factory-preset path,
+                        which needs the allow list to resolve `data:/presets/` roots.
 Each script finishes with a final text message.
 
 Run:   python tests/scripted/ai_mock_server.py            (listens on http://127.0.0.1:8765/v1)
@@ -14,8 +17,10 @@ Point LMMS Settings -> AI at base URL http://127.0.0.1:8765/v1, any key, any mod
 
 Endpoints: GET /v1/models, POST /v1/chat/completions (stream true/false).
 Each user message restarts the script. Track indices are learned only from this turn's
-add_instrument_track tool results (tool results from earlier turns may still sit in the
-history) and substituted for the $T0/$T1/... placeholders on the "track" and "index" fields.
+add_instrument_track / add_track tool results (tool results from earlier turns may still sit in
+the history) and substituted for the $T0/$T1/... placeholders on the "track" and "index" fields.
+`$PRESETPATH` takes the first path from this turn's latest list_presets result, and `$PRESETXML`
+wraps this turn's latest get_preset_xml result as a <track> element ready for add_track.
 One line per request is printed to stdout: method, path, step, tool names, finish reason.
 """
 import json
@@ -92,24 +97,41 @@ SONG_SCRIPT = [
 SONG_FINAL = ("Built a short song at 120 BPM: Intro 4 / Verse 8 / Outro 4. "
 			  "Bass pulses 8th-note roots, Chords lay down the progression, Lead carries the hook.")
 
+# --- preset script (AI_MOCK_SCRIPT=preset) -------------------------------------------------
+
+PRESET_NOTES = [{"pos": p, "len": 48, "key": 36} for p in range(0, 768, 96)]
+
+PRESET_SCRIPT = [
+	[tool(1, "list_presets", {"query": "Drums_Kick", "limit": 5})],
+	[tool(2, "get_preset_xml", {"path": "$PRESETPATH"})],
+	[tool(3, "add_track", {"xml": "$PRESETXML"})],
+	[tool(4, "add_notes", {"track": "$T0", "clipPos": 0, "notes": PRESET_NOTES})],
+	[tool(5, "get_project_summary", {})],
+]
+PRESET_FINAL = "Loaded the Drums_Kick factory preset onto a new track and wrote a 4-bar kick pattern."
+
 SCRIPTS = {
 	"drumloop": (DRUMLOOP_SCRIPT, DRUMLOOP_FINAL),
 	"song": (SONG_SCRIPT, SONG_FINAL),
+	"preset": (PRESET_SCRIPT, PRESET_FINAL),
 }
 SCRIPT_NAME = os.environ.get("AI_MOCK_SCRIPT", "drumloop").lower()
 if SCRIPT_NAME not in SCRIPTS:
 	print(f"AI_MOCK_SCRIPT={SCRIPT_NAME!r} unknown; using drumloop (choices: {', '.join(SCRIPTS)})", flush=True)
 	SCRIPT_NAME = "drumloop"
 SCRIPT, FINAL_TEXT = SCRIPTS[SCRIPT_NAME]
-STATE = {"step": 0, "tracks": [], "seen_user": False}
+STATE = {"step": 0, "tracks": [], "seen_user": False, "preset_path": None, "preset_xml": None}
 
 
 def learn_tracks(msgs):
-	"""Collect this turn's add_instrument_track indices, in call order.
+	"""Collect this turn's add_instrument_track indices (in call order) plus the latest
+	list_presets path and get_preset_xml payload.
 	Tool results from earlier turns may still sit in the history, so only results produced
 	after the latest user message are considered; $Tn resolves into STATE["tracks"]."""
 	if not STATE["seen_user"]:
 		STATE["tracks"] = []
+		STATE["preset_path"] = None
+		STATE["preset_xml"] = None
 		STATE["seen_user"] = True
 	turn_start = max((i for i, m in enumerate(msgs) if m.get("role") == "user"), default=0)
 	call_names = {}
@@ -118,14 +140,25 @@ def learn_tracks(msgs):
 			for c in m.get("tool_calls") or []:
 				call_names[c.get("id")] = (c.get("function") or {}).get("name")
 	for m in msgs[turn_start:]:
-		if m.get("role") != "tool" or call_names.get(m.get("tool_call_id")) != "add_instrument_track":
+		if m.get("role") != "tool":
 			continue
+		name = call_names.get(m.get("tool_call_id"))
 		try:
 			r = json.loads(m.get("content") or "")
 		except ValueError:
 			continue  # e.g. "[elided]" content once the session trims history
-		if isinstance(r, dict) and r.get("ok") and isinstance(r.get("index"), int) and r["index"] not in STATE["tracks"]:
-			STATE["tracks"].append(r["index"])
+		if not isinstance(r, dict) or not r.get("ok"):
+			continue
+		if name in ("add_instrument_track", "add_track"):
+			if isinstance(r.get("index"), int) and r["index"] not in STATE["tracks"]:
+				STATE["tracks"].append(r["index"])
+		elif name == "list_presets":
+			presets = r.get("presets")
+			if isinstance(presets, list) and presets:
+				STATE["preset_path"] = presets[0]
+		elif name == "get_preset_xml":
+			if isinstance(r.get("xml"), str):
+				STATE["preset_xml"] = r["xml"]
 
 
 def next_message():
@@ -142,6 +175,15 @@ def next_message():
 				if n >= len(STATE["tracks"]):
 					raise LookupError(f"placeholder {t} unresolved: learned tracks {STATE['tracks']}")
 				a[key] = STATE["tracks"][n]
+		if a.get("path") == "$PRESETPATH":
+			if not STATE["preset_path"]:
+				raise LookupError("placeholder $PRESETPATH unresolved: no list_presets result this turn")
+			a["path"] = STATE["preset_path"]
+		if a.get("xml") == "$PRESETXML":
+			if not STATE["preset_xml"]:
+				raise LookupError("placeholder $PRESETXML unresolved: no get_preset_xml result this turn")
+			# get_preset_xml returns the bare <instrumenttrack>; add_track wants a <track> wrapper.
+			a["xml"] = '<track type="0" name="Kick" muted="0">' + STATE["preset_xml"] + "</track>"
 		c["function"]["arguments"] = json.dumps(a)
 	STATE["step"] += 1
 	return {"role": "assistant", "content": None, "tool_calls": calls}, "tool_calls"

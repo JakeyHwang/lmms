@@ -123,6 +123,14 @@ private slots:
 		QVERIFY(!p.finished());
 		QCOMPARE(p.error(), QString("Malformed stream event: {not json"));
 	}
+	void finishReasonIsRecorded()
+	{
+		lmms::OpenAiStreamParser p;
+		p.feed("data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"length\"}]}\n\ndata: [DONE]\n\n");
+		QVERIFY(p.finished());
+		QCOMPARE(p.finishReason(), QString("length"));
+		QCOMPARE(p.message()["content"].toString(), QString(""));
+	}
 };
 QTEST_GUILESS_MAIN(OpenAiStreamParserTest)
 #include "OpenAiStreamParserTest.moc"

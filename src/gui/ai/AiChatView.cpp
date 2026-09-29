@@ -24,6 +24,7 @@
 
 #include "AiChatView.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QJsonDocument>
@@ -159,8 +160,16 @@ void AiChatView::reloadConfig()
 void AiChatView::refreshPolicyRoots()
 {
 	const auto cm = ConfigManager::inst();
-	QStringList roots{cm->dataDir(), cm->workingDir(), cm->factoryPresetsDir(), cm->userPresetsDir(),
-		cm->factorySamplesDir(), cm->userSamplesDir()};
+	// ConfigManager hands out the factory folders as `data:/…` Qt search-path tokens
+	// (`ConfigManager.cpp:76` + `QDir::addSearchPath("data", …)`), while the discovery tools hand the
+	// model real absolute paths. Resolve every root the way PathUtil resolves its factory bases, or
+	// the allow list can never match the paths `list_presets`/`list_samples` just returned.
+	QStringList roots;
+	for (const auto& dir : {cm->dataDir(), cm->workingDir(), cm->factoryPresetsDir(), cm->userPresetsDir(),
+			 cm->factorySamplesDir(), cm->userSamplesDir()})
+	{
+		if (!dir.isEmpty()) { roots << QDir(dir).absolutePath(); }
+	}
 	const QString& projectFile = Engine::getSong()->projectFileName();
 	if (!projectFile.isEmpty()) { roots << QFileInfo(projectFile).absolutePath(); }
 	m_policy.setRoots(roots);

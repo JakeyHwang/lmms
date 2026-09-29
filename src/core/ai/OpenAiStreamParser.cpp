@@ -115,7 +115,11 @@ void OpenAiStreamParser::handleChoice(const QJsonObject& choice, bool streaming)
 		if (fn.contains("name")) { slot.name += fn["name"].toString(); }
 		slot.arguments += fn["arguments"].toString();
 	}
-	if (!choice["finish_reason"].isNull() && choice["finish_reason"].isString()) { m_finished = true; }
+	if (!choice["finish_reason"].isNull() && choice["finish_reason"].isString())
+	{
+		m_finished = true;
+		m_finishReason = choice["finish_reason"].toString();
+	}
 }
 
 QJsonObject OpenAiStreamParser::message() const

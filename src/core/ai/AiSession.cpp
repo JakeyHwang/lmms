@@ -99,6 +99,15 @@ void AiSession::onCompleted(const QJsonObject& assistantMessage)
 	if (calls.isEmpty())
 	{
 		msg.remove("tool_calls"); // an empty array is a plain-text reply; don't send it back
+		if (msg["content"].toString().trimmed().isEmpty())
+		{
+			// nothing to keep: roll back like a failure so a retry starts clean
+			while (m_history.size() > m_turnStartIndex) { m_history.removeLast(); }
+			failTurn(tr("The model ended its reply without any content or tool calls — "
+						"its output was most likely cut off by the provider's token limit. "
+						"Increase 'Max tokens' in Settings > AI and try again."));
+			return;
+		}
 		m_history.append(msg);
 		finishTurn(msg["content"].toString());
 		return;

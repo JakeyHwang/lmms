@@ -1,0 +1,4 @@
+ledger.jsonl
+.baseline.json
+.sync-state.json
+*.tmp

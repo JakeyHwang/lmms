@@ -43,6 +43,7 @@ public:
 	void end();                           //!< call when the body is complete (handles non-SSE bodies)
 	bool finished() const { return m_finished; }
 	QString error() const { return m_error; }
+	QString finishReason() const { return m_finishReason; }
 	QJsonObject message() const;          //!< {role, content, tool_calls?}
 	QStringList takeTextDeltas();         //!< deltas since last call
 	QStringList textDeltas() const { return m_allDeltas; }
@@ -58,6 +59,7 @@ private:
 	QMap<int, ToolCall> m_toolCalls;
 	QStringList m_pendingDeltas, m_allDeltas;
 	QString m_error;
+	QString m_finishReason;
 	bool m_finished = false;
 	bool m_sawSse = false;
 };

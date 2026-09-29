@@ -218,6 +218,25 @@ private slots:
 		QCOMPARE(s.history().size(), 3);
 		QVERIFY(!s.history()[2].toObject().contains("tool_calls"));
 	}
+	void emptyCompletionFailsTurn()
+	{
+		// finish_reason:length with no content and no tool calls: the provider
+		// cut the stream off (e.g. reasoning burned the output budget) and the
+		// user must be told, not shown a silent "Done".
+		FakeAiClient c; TestSession s(&c, &reg);
+		c.scripted << QJsonObject{{"role", "assistant"}, {"content", ""}};
+		QSignalSpy failed(&s, &lmms::AiSession::turnFailed);
+		QSignalSpy fin(&s, &lmms::AiSession::turnFinished);
+		s.submit("go");
+		QVERIFY(failed.wait(2000));
+		QCOMPARE(failed.count(), 1);
+		QCOMPARE(fin.count(), 0);
+		QVERIFY(failed[0][0].toString().contains("token limit"));
+		// history rolled back to the system prompt; the empty reply must not
+		// be sent back as an assistant message on retry
+		QCOMPARE(s.history().size(), 1);
+		QVERIFY(!s.busy());
+	}
 	void revertLastTurnRestoresProjectSnapshot()
 	{
 		QTemporaryDir dir;

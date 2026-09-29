@@ -40,6 +40,10 @@ void OpenAiClient::send(const QJsonArray& messages, const QJsonArray& tools)
 	abort();
 	m_parser = std::make_unique<OpenAiStreamParser>();
 	QJsonObject body{{"model", m_config.model}, {"messages", messages}, {"stream", true}};
+	if (m_config.maxTokens > 0) { body["max_tokens"] = m_config.maxTokens; }
+	// Qwen/vLLM/SGLang-style gateways read this out of the chat template. Providers that do not
+	// recognise it ignore it, so it is only sent when the user explicitly asked for it.
+	if (m_config.disableThinking) { body["chat_template_kwargs"] = QJsonObject{{"enable_thinking", false}}; }
 	if (!tools.isEmpty()) { body["tools"] = tools; body["tool_choice"] = "auto"; }
 	QNetworkRequest req(QUrl(m_config.baseUrl + "/chat/completions"));
 	req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");

@@ -36,6 +36,9 @@ AiConfig AiConfig::load()
 	c.baseUrl = cm->value("ai", "baseurl", DefaultBaseUrl);
 	c.apiKey = cm->value("ai", "apikey");
 	c.model = cm->value("ai", "model");
+	c.maxTokens = cm->value("ai", "maxtokens").toInt();
+	if (c.maxTokens < 0) { c.maxTokens = 0; }
+	c.disableThinking = cm->value("ai", "disablethinking").toInt() != 0;
 	while (c.baseUrl.endsWith('/')) { c.baseUrl.chop(1); }
 	return c;
 }
@@ -46,6 +49,8 @@ void AiConfig::save(const AiConfig& c)
 	cm->setValue("ai", "baseurl", c.baseUrl);
 	cm->setValue("ai", "apikey", c.apiKey);
 	cm->setValue("ai", "model", c.model);
+	cm->setValue("ai", "maxtokens", QString::number(c.maxTokens));
+	cm->setValue("ai", "disablethinking", QString::number(c.disableThinking ? 1 : 0));
 }
 
 } // namespace lmms

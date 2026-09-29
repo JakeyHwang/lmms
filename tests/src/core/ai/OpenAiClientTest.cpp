@@ -129,6 +129,54 @@ private slots:
 		QVERIFY(!failed.wait(200));
 		QCOMPARE(completed.count(), 0);
 	}
+	void maxTokensIncludedInBodyWhenSet()
+	{
+		MockServer server(
+			"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+			"data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n");
+		auto cfg = server.config();
+		cfg.maxTokens = 16384;
+		lmms::OpenAiClient c(cfg);
+		QSignalSpy completed(&c, &lmms::AiClient::completed);
+		c.send(QJsonArray{}, {});
+		QVERIFY(completed.wait(5000));
+		QVERIFY(server.request.contains("\"max_tokens\":16384"));
+	}
+	void maxTokensOmittedWhenZero()
+	{
+		MockServer server(
+			"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+			"data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\\n");
+		lmms::OpenAiClient c(server.config());
+		QSignalSpy completed(&c, &lmms::AiClient::completed);
+		c.send(QJsonArray{}, {});
+		QVERIFY(completed.wait(5000));
+		QVERIFY(!server.request.contains("max_tokens"));
+	}
+	void disableThinkingIncludedInBodyWhenSet()
+	{
+		MockServer server(
+			"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+			"data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n");
+		auto cfg = server.config();
+		cfg.disableThinking = true;
+		lmms::OpenAiClient c(cfg);
+		QSignalSpy completed(&c, &lmms::AiClient::completed);
+		c.send(QJsonArray{}, {});
+		QVERIFY(completed.wait(5000));
+		QVERIFY(server.request.contains("\"chat_template_kwargs\":{\"enable_thinking\":false}"));
+	}
+	void disableThinkingOmittedByDefault()
+	{
+		MockServer server(
+			"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+			"data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n");
+		lmms::OpenAiClient c(server.config());
+		QSignalSpy completed(&c, &lmms::AiClient::completed);
+		c.send(QJsonArray{}, {});
+		QVERIFY(completed.wait(5000));
+		QVERIFY(!server.request.contains("chat_template_kwargs"));
+	}
 	void testConnectionRefused()
 	{
 		lmms::OpenAiClient c({"http://127.0.0.1:1/v1", "k", "m"});

@@ -37,6 +37,14 @@ struct LMMS_EXPORT AiConfig
 	QString baseUrl;
 	QString apiKey;
 	QString model;
+	//! Output token budget sent as `max_tokens` (0 = don't send the field; let the
+	//! provider decide). Raise it when turns end empty on reasoning models.
+	int maxTokens = 0;
+	//! Ask the provider to skip the model's hidden reasoning pass, sent as
+	//! `chat_template_kwargs: {"enable_thinking": false}` (Qwen/vLLM/SGLang-style gateways).
+	//! Reasoning can consume the whole budget and leave a turn with no content and no tool
+	//! calls; turning it off is what makes such a model usable here.
+	bool disableThinking = false;
 	static AiConfig load();
 	static void save(const AiConfig& c);
 	bool configured() const { return !apiKey.isEmpty() && !model.isEmpty(); }

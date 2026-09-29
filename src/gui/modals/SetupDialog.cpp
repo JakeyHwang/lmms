@@ -33,6 +33,7 @@
 #include <QLineEdit>
 #include <QPointer>
 #include <QScrollArea>
+#include <QSpinBox>
 
 #include "AiConfig.h"
 #include "AudioEngine.h"
@@ -885,7 +886,8 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 	m_aiBaseUrl = aiConfig.baseUrl;
 	m_aiApiKey = aiConfig.apiKey;
 	m_aiModel = aiConfig.model;
-
+	m_aiMaxTokens = aiConfig.maxTokens;
+	m_aiDisableThinking = aiConfig.disableThinking;
 	// AI endpoint group
 	auto aiEndpointBox = new QGroupBox(tr("OpenAI-compatible endpoint"), ai_w);
 	auto aiEndpointLayout = new QFormLayout(aiEndpointBox);
@@ -915,6 +917,30 @@ SetupDialog::SetupDialog(ConfigTab tab_to_open) :
 			this, &SetupDialog::setAiModel);
 	aiEndpointLayout->addRow(tr("Model"), aiModelLineEdit);
 
+	auto aiMaxTokensSpinBox = new QSpinBox(aiEndpointBox);
+	aiMaxTokensSpinBox->setRange(0, 131072);
+	aiMaxTokensSpinBox->setValue(m_aiMaxTokens);
+	aiMaxTokensSpinBox->setSpecialValueText(
+			tr("provider default (0)"));
+	aiMaxTokensSpinBox->setToolTip(
+			tr("Maximum completion tokens per request. 0 leaves the limit to the "
+				"provider. Reasoning models spend thousands of tokens thinking before "
+				"acting — raise this (e.g. 16384) when a turn ends with no reply or no "
+				"tool calls."));
+	connect(aiMaxTokensSpinBox, qOverload<int>(&QSpinBox::valueChanged),
+			this, &SetupDialog::setAiMaxTokens);
+	aiEndpointLayout->addRow(tr("Max tokens"), aiMaxTokensSpinBox);
+
+	auto aiDisableThinkingCheckBox = new QCheckBox(tr("Disable model reasoning"), aiEndpointBox);
+	aiDisableThinkingCheckBox->setChecked(m_aiDisableThinking);
+	aiDisableThinkingCheckBox->setToolTip(
+			tr("Send chat_template_kwargs {\"enable_thinking\": false}, understood by "
+				"Qwen-style gateways (vLLM, SGLang). Reasoning models can spend their whole "
+				"token budget thinking and return nothing at all; turning reasoning off "
+				"makes them answer directly. Ignored by providers that do not support it."));
+	connect(aiDisableThinkingCheckBox, &QCheckBox::toggled,
+			this, &SetupDialog::toggleAiDisableThinking);
+	aiEndpointLayout->addRow(QString(), aiDisableThinkingCheckBox);
 	auto aiTestBtn = new QPushButton(tr("Test connection"), aiEndpointBox);
 	connect(aiTestBtn, &QPushButton::clicked,
 			this, &SetupDialog::testAiConnection);
@@ -1118,7 +1144,7 @@ void SetupDialog::accept()
 	{
 		it.value()->saveSettings();
 	}
-	AiConfig::save({m_aiBaseUrl, m_aiApiKey, m_aiModel});
+	AiConfig::save({m_aiBaseUrl, m_aiApiKey, m_aiModel, m_aiMaxTokens, m_aiDisableThinking});
 	ConfigManager::inst()->saveConfigFile();
 }
 
@@ -1578,6 +1604,16 @@ void SetupDialog::setAiModel(const QString & model)
 	m_aiModel = model;
 }
 
+
+void SetupDialog::setAiMaxTokens(int maxTokens)
+{
+	m_aiMaxTokens = maxTokens;
+}
+
+void SetupDialog::toggleAiDisableThinking(bool disable)
+{
+	m_aiDisableThinking = disable;
+}
 
 void SetupDialog::toggleAiKeyVisible(bool visible)
 {
