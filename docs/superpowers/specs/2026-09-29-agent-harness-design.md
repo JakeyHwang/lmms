@@ -160,7 +160,8 @@ itself, so tests can run the server against a registry with only `ping`.
 - One sentence that the token grants full control of the open project to any
   local process that can read the file.
 
-`AiConfig` becomes `struct { bool agentServer = false; static load(); static save(); }`.
+`AiConfig` becomes `struct { bool agentServer = true; static load(); static save(); }` —
+on by default (user decision 2026-09-30); an absent `ai/agentserver` key means enabled, `"0"` disables.
 
 ## 5. Skill: `.claude/skills/lmms-composer/`
 

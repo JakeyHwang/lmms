@@ -32,8 +32,8 @@ namespace lmms
 
 struct LMMS_EXPORT AiConfig
 {
-	//! Start the loopback agent server at launch (Settings > AI). Read once at startup.
-	bool agentServer = false;
+	//! Start the loopback agent server at launch (Settings > AI). On by default; read once at startup.
+	bool agentServer = true;
 	static AiConfig load();
 	static void save(const AiConfig& c);
 };

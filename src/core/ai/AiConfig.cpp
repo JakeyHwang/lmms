@@ -32,7 +32,9 @@ namespace lmms
 AiConfig AiConfig::load()
 {
 	AiConfig c;
-	c.agentServer = ConfigManager::inst()->value("ai", "agentserver").toInt() != 0;
+	// Enabled unless the user has switched it off: an absent key keeps the default.
+	const QString v = ConfigManager::inst()->value("ai", "agentserver");
+	if (!v.isEmpty()) { c.agentServer = v.toInt() != 0; }
 	return c;
 }
 

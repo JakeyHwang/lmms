@@ -15,9 +15,9 @@ authoritative schema.
 
 ## Connect
 
-1. The agent server must be enabled: **Settings → AI → "Allow an external agent to control LMMS over
-   localhost (takes effect after restart)"**, then restart LMMS. Equivalent: `<ai agentserver="1"/>`
-   in `~/.lmmsrc.xml` before launch.
+1. The agent server is on by default. If it has been switched off: **Settings → AI → "Allow an
+   external agent to control LMMS over localhost (takes effect after restart)"**, then restart LMMS.
+   Equivalent: `<ai agentserver="1"/>` in `~/.lmmsrc.xml` before launch.
 2. Start LMMS under the process supervisor:
    `hub start name=lmms application=C:/git_repos/lmms/build/lmms.exe ready.log="AiAgentServer: listening"`.
    The ready line is `AiAgentServer: listening on 127.0.0.1:<port>, token file <path>`.
