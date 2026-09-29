@@ -2,8 +2,8 @@
   "version": 1,
   "repo": "lmms",
   "bootstrappedAt": "2026-09-16",
-  "lastSyncedCommit": "c5bb4e5a9",
-  "lastSyncedRange": "a929195ee67866e5ee1d3c7744609a7fd868f220..c5bb4e5a9",
+  "lastSyncedCommit": "805c31c5c",
+  "lastSyncedRange": "4e0f15a1c4e3fe5cc3d7cccdd7aea8c1d82d40b8..805c31c5cf3716c4d996c3932a6a7ef884452367",
   "fenceFormat": {
     "open": "<!-- claude:auto:<slug> -->",
     "close": "<!-- /claude:auto:<slug> -->"
@@ -52,17 +52,17 @@
   "specs": [
     {
       "path": "docs/superpowers/specs/2026-09-29-agent-harness-design.md",
-      "status": "GOVERNING and IMPLEMENTED as of c5bb4e5a9 (2026-09-30). Everything it specifies exists: AiAgentServer (include/AiAgentServer.h, src/core/ai/AiAgentServer.cpp), AiProjectSnapshot, registerAiMetaTools (src/core/ai/AiMetaTools.cpp), add_sf2_track, 35 registered tools, .claude/skills/lmms-composer/ with lmmsctl.py + check_render.py + fetch_soundfont.py, and the single ai/agentserver setting. Its own header :4 is STALE - still 'Status: approved design, pending implementation plan'. Prose outside a fence in a spec doc, so the steward cannot fix it; raised for the author, exactly as 835de8f83 did for the 2026-09-16 spec.",
+      "status": "GOVERNING and IMPLEMENTED. Everything it specifies exists: AiAgentServer (include/AiAgentServer.h, src/core/ai/AiAgentServer.cpp), AiProjectSnapshot, registerAiMetaTools (src/core/ai/AiMetaTools.cpp), add_sf2_track, 35 registered tools, .claude/skills/lmms-composer/ with lmmsctl.py + check_render.py + fetch_soundfont.py, and the single ai/agentserver setting. Its header :4 now reads 'Status: implemented (plan ../plans/2026-09-29-agent-harness.md, all tasks landed)' as of 801be6760 - the stale-status open question is CLOSED. Do not re-raise.",
       "governing": true,
       "taskState": "none - prose design doc, no checkboxes and no per-item 'status:' lines. The single 'Status:' at :4 is front matter for the whole doc, not task state, and is not the steward's to flip.",
       "firstSeen": "a929195ee67866e5ee1d3c7744609a7fd868f220"
     },
     {
       "path": "docs/superpowers/plans/2026-09-29-agent-harness.md",
-      "status": "IMPLEMENTED. 11 tasks, 59 step boxes, 58 flipped to [x] by this sync on commit + file + controller-ledger evidence. The single open box is line 1075, Task 11's own 'dispatch the context-steward over the full range; relay its report' - the relay is the controller's act, not the steward's, so it was deliberately left for Main. No task text altered anywhere.",
+      "status": "IMPLEMENTED and CLOSED at 59/59. Task 11's own 'dispatch the context-steward over the full range; relay its report' box was flipped by its author in the 4e0f15a1c..805c31c5c range. The only remaining '- [ ]' in the file is the boilerplate checkbox example in the for-agentic-workers preamble at :3, which is not a task. No task text altered anywhere.",
       "governing": false,
       "derivedFrom": "docs/superpowers/specs/2026-09-29-agent-harness-design.md",
-      "taskState": "59 boxes / 58 [x] / 1 open (line 1075). Evidence per task: T1 d4f1ae2ad..ef7c416b2, T2 226d610f7+25951a958, T3 635b0210b..a71d14163 (merged 5f8500510), T4 58f061cc9, T5 878b42c8e, T6 acd72666f+63f398c8c, T7 6f52c25ee, T8 70df120e1, T9 progress.md:52 + spec line 835de8f83, T10 progress.md:53 confirmed live by Main.",
+      "taskState": "59 boxes / 59 [x] / 0 open. Evidence per task: T1 d4f1ae2ad..ef7c416b2, T2 226d610f7+25951a958, T3 635b0210b..a71d14163 (merged 5f8500510), T4 58f061cc9, T5 878b42c8e, T6 acd72666f+63f398c8c, T7 6f52c25ee, T8 70df120e1, T9 progress.md:52 + spec line 835de8f83, T10 progress.md:53 confirmed live by Main, T11 flipped by author in 805c31c5c's range.",
       "firstSeen": "048c2cf95"
     },
     {
@@ -92,6 +92,8 @@
     "2026-09-30: CLAUDE.md and .claude/ are now TRACKED (committed inside the harness range). The old note that steward edits were working-tree-only no longer applies, but the steward still never commits on its own initiative - this sync committed only because the dispatch explicitly asked for 'docs: sync context for agent harness'.",
     "2026-09-30 CLOSED: the previous sync's above-floor item about 13 uncommitted tracked files is resolved. That work was committed as 95d161900 ('wip(ai): LLM client max_tokens / thinking options') before 635b0210b deleted the files, so nothing was destroyed silently.",
     "2026-09-30 CLOSED: the 2026-09-16 spec now carries its supersede marker (835de8f83). Do not re-raise.",
+    "2026-09-30 CLOSED: the 2026-09-29 harness spec's own status line is no longer stale - 801be6760 set :4 to 'Status: implemented'. Do not re-raise.",
+    "2026-09-30 fix wave 4e0f15a1c..805c31c5c, 17 files +20/-16, all modified (0 added, 0 deleted): spec status line, an 'AI Composer' -> 'agent harness' comment sweep across include/ src/ tests/, AiProjectSnapshot::restore() flush check (+1), AiAgentServer::start() QFile::setPermissions owner-only (+3), plan Task 11 box. Line-anchor recheck: AiAgentServer.cpp:47-50 (defaultTokenFilePath) and DataFile.cpp:2041-2043 both UNSHIFTED - the AiAgentServer insertion is at :75-77, below the anchored range; AiProjectTools.cpp:350/:428, AiActionTools.cpp:130, AiPathPolicy.h:36, AiProjectSnapshot.h:43, GuiApplication.cpp:223/:229 all re-verified by sed. New anchor added to CLAUDE.md: AiAgentServer.cpp:75-77.",
     "2026-09-30 CARRIED, above floor: Song-Editor scroll-to-track. The 2026-09-16 design section 4 (:197-198) promised tools that add a track scroll the Song Editor to it; never implemented (the only SongEditor use under src/core/ai/ is moveTrackView for replace_track positioning, AiProjectTools.cpp:428) and the harness design does not carry it forward. The Song Editor survived the cutover, so it is a dropped agreed requirement, not a moot one.",
     "2026-09-30: the render-blocking nested loop.exec at src/core/ai/AiActionTools.cpp:130-134 is APPROVED behaviour per harness design section 6. Never re-raise it as a deviation.",
     "Two controller rulings deviate from the harness design and are recorded at .superpowers/sdd/2026-09-29-agent-harness/progress.md:54-55: lmmsctl.py resolves the token file from a candidate list (env, ~/.lmmsrc.xml workingdir, ~/Documents/lmms, ~/OneDrive/Documents/lmms, ~/lmms) rather than one path, because a dev build keeps .lmmsrc.xml beside the executable (ConfigManager::initDevelopmentWorkingDir, src/core/ConfigManager.cpp:717); and fetch_soundfont.py defaults its destination to lmmsctl.working_dir() because the SoundFont must sit under an AiPathPolicy root.",

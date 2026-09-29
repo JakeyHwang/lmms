@@ -137,8 +137,8 @@ Entry points:
 <!-- claude:auto:active-specs -->
 | Doc | Status | Scope |
 |---|---|---|
-| `docs/superpowers/specs/2026-09-29-agent-harness-design.md` | **Governing design, now implemented.** Its own header line `:4` still reads `Status: approved design, pending implementation plan`, which is stale — the plan below exists and every task in it has landed. Prose outside a fence, so the steward left it; it needs the doc's author. | External coding agent drives LMMS over loopback NDJSON instead of an in-app LLM. Keeps `AiToolRegistry` and the project/discovery/action tools; adds `AiAgentServer`, `AiProjectSnapshot`, five meta-tools and `add_sf2_track`; deletes everything that talked to a model. |
-| `docs/superpowers/plans/2026-09-29-agent-harness.md` | Implementation plan, 11 tasks / 59 step boxes, **58 `[x]`**. The one open box is Task 11's own "dispatch the context-steward and relay its report", which the controller closes. Task 10's success criterion is the user's ear on the shared render, and that verdict is still pending. | Build order: snapshot + meta-tools + `add_sf2_track` (1), `AiAgentServer` (2), removal of the in-app LLM path in a worktree lane (3), settings checkbox and start-up wiring (4), `lmmsctl.py` (5), `check_render.py` (6), `fetch_soundfont.py` (7), skill doc and references (8), integration (9), live music smoke (10), docs sync (11). |
+| `docs/superpowers/specs/2026-09-29-agent-harness-design.md` | **Governing design, implemented.** Its header line `:4` now reads `Status: implemented (plan …, all tasks landed)` (`801be6760`); the stale `approved design, pending implementation plan` line the last sync flagged is gone. | External coding agent drives LMMS over loopback NDJSON instead of an in-app LLM. Keeps `AiToolRegistry` and the project/discovery/action tools; adds `AiAgentServer`, `AiProjectSnapshot`, five meta-tools and `add_sf2_track`; deletes everything that talked to a model. |
+| `docs/superpowers/plans/2026-09-29-agent-harness.md` | Implementation plan, 11 tasks / **59 of 59 step boxes `[x]`** — Task 11's own "dispatch the context-steward and relay its report" was flipped in `805c31c5c`'s range. The only remaining `- [ ]` in the file is the boilerplate example in the for-agentic-workers preamble (`:3`), not a task. Task 10's success criterion is the user's ear on the shared render, and that verdict is still pending. | Build order: snapshot + meta-tools + `add_sf2_track` (1), `AiAgentServer` (2), removal of the in-app LLM path in a worktree lane (3), settings checkbox and start-up wiring (4), `lmmsctl.py` (5), `check_render.py` (6), `fetch_soundfont.py` (7), skill doc and references (8), integration (9), live music smoke (10), docs sync (11). |
 | `docs/superpowers/specs/2026-09-16-ai-composer-design.md` | **Superseded**, and now marked so in the file itself (`:4`, commit `835de8f83`). History, not a build target: the panel, client, session and prompt it describes are all deleted. Its §2 tool table still describes the tool layer, which lives on behind the agent server. | In-app AI chat panel driving the open project through the `.mmp` XML surface; OpenAI-compatible chat-completions with tool calling, agent loop in-process. |
 | `docs/superpowers/plans/2026-09-16-ai-composer.md` | Closed at **60/60**, and now plans a superseded design. Untouched by this range. | The original 13-task AI Composer build order. |
 
@@ -169,7 +169,10 @@ still answers `result.ok=false`. Binds `127.0.0.1` only, ephemeral port. Port an
 are written to `ConfigManager::inst()->workingDir() + ".lmms-agent.json"`
 (`AiAgentServer::defaultTokenFilePath()`, `src/core/ai/AiAgentServer.cpp:47-50`) and the file is
 removed on `aboutToQuit` — `main.cpp` never deletes the `GuiApplication`, so the destructor would
-not run (`src/gui/GuiApplication.cpp:229-231`). Handlers run on the GUI thread, one at a time, in
+not run (`src/gui/GuiApplication.cpp:229-231`). The token file is also narrowed to
+`ReadOwner | WriteOwner` right after it is written (`AiAgentServer::start`,
+`src/core/ai/AiAgentServer.cpp:75-77`) — best effort, unchecked, because on Windows Qt maps that
+onto the read-only attribute only. Handlers run on the GUI thread, one at a time, in
 arrival order; bytes arriving mid-handler are dispatched after it returns (`m_dispatching`).
 
 **35 registered tools**, across four tables: `add_automation`, `add_clips`, `add_effect`,
@@ -185,8 +188,9 @@ all 35 in prose; `lmmsctl.py tools --schema` is the authoritative schema.
 
 **Undo/redo is now explicit, not per-turn.** `AiProjectSnapshot` holds one whole-project buffer:
 `checkpoint` calls `take()` (`Song::saveProjectData(DataFile&)`, `include/Song.h:256`, and turns
-journalling off), `revert` calls `restore()` (writes a temp file and `Song::loadProject`s it),
-`commit` calls `drop()`. `revert` and `commit` error with "No checkpoint held" when none is.
+journalling off), `revert` calls `restore()` (writes a temp file, **fails if the flush fails**, and
+`Song::loadProject`s it), `commit` calls `drop()`. `revert` and `commit` error with
+"No checkpoint held" when none is.
 `AiSession`'s automatic per-turn revert went with the session.
 
 Two engine-wide changes predate the cutover and survive it: `EffectChain::effects()`

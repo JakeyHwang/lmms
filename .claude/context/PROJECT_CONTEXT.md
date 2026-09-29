@@ -3,17 +3,17 @@
 Agent-facing repo state. Derived: regenerated wholesale each context sync, 300-line budget. Nothing
 here is authoritative — durable decisions get promoted into `CLAUDE.md` or the governing spec.
 
-Synced at commit `c5bb4e5a9` (2026-09-30), dispatched range `a929195ee..047bd874e`, extended by the
-controller to `a929195ee..c5bb4e5a9`. **58 files changed, +4435/−2417** over the dispatched range
-(20 added, 18 deleted, 20 modified), plus 3 skill files in the extension. Working tree is clean
-apart from this sync's own doc edits. Fork: `origin` → `JakeyHwang/lmms`, `upstream` → `lmms/lmms`.
-Branch: `ai-composer`.
+Synced at commit `805c31c5c` (2026-09-30), dispatched range
+`4e0f15a1c..805c31c5c` — **17 files changed, +20/−16**, all modified, none added or deleted.
+Fork: `origin` → `JakeyHwang/lmms`, `upstream` → `lmms/lmms`. Branch: `ai-composer`.
 
-This range is the **agent-harness cutover**: the in-app LLM composer is gone, replaced by a loopback
-NDJSON server plus a repo-local skill. It is also the range in which `CLAUDE.md` and `.claude/`
-became *tracked* files — both were untracked at the previous sync, and the previous sync's warning
-about 13 uncommitted tracked files is resolved: that work was preserved as `95d161900`
-(`wip(ai): LLM client max_tokens / thinking options`) before being deleted by the cutover.
+This range is the **harness fix wave** that follows the cutover: the governing spec's status line
+moved to `implemented` (`801be6760`), the last "AI Composer" comments across `include/`, `src/` and
+`tests/` were swept to "agent harness" (`08a07600a`, `805c31c5c`), `AiProjectSnapshot::restore()`
+gained a flush check, and the agent token file is now narrowed to owner-only after it is written.
+No file was added, deleted or renamed, so no managed reference could go dead this range; the
+proactive path sweep re-resolved every path named in `CLAUDE.md` and in this file against the tree
+at `805c31c5c` and all of them still exist.
 
 ## Entry points
 
@@ -59,9 +59,11 @@ provider settings, no `data/ai/system_prompt.md`. The model-facing knowledge liv
 
 ## Which spec governs
 
-`docs/superpowers/specs/2026-09-29-agent-harness-design.md` governs and is now **implemented**. Its
-plan, `docs/superpowers/plans/2026-09-29-agent-harness.md`, is at **58 of 59** step boxes, the one
-open box being Task 11's own docs-sync relay.
+`docs/superpowers/specs/2026-09-29-agent-harness-design.md` governs, is **implemented**, and now
+says so in its own header (`:4`, `801be6760`). Its plan,
+`docs/superpowers/plans/2026-09-29-agent-harness.md`, is at **59 of 59** step boxes; the single
+remaining `- [ ]` in that file is the boilerplate checkbox example in the for-agentic-workers
+preamble (`:3`), not a task.
 
 `docs/superpowers/specs/2026-09-16-ai-composer-design.md` is marked superseded in the file itself as
 of `835de8f83` — the open question the last two syncs carried is answered and closed.
@@ -99,6 +101,20 @@ cap at 64 KB (`MaxXmlBytes`, `src/core/ai/AiProjectTools.cpp:350`).
 
 ## Recent changes
 
+- 2026-09-30 — harness fix wave landed, `4e0f15a1c..805c31c5c` (3 commits, 17 files, +20/−16):
+  spec status → `implemented`; every remaining "AI Composer" comment across `include/`,
+  `src/core/ai/`, `src/core/DataFile.cpp` and `tests/src/core/ai/` swept to "agent harness";
+  `AiProjectSnapshot::restore()` now fails on a failed temp-file flush; the agent token file is
+  narrowed to `ReadOwner | WriteOwner` after writing. No file added, deleted or renamed.
+- 2026-09-30 — open question "the governing spec's own status line is stale" **answered** and
+  deleted: `801be6760` set `2026-09-29-agent-harness-design.md:4` to
+  `Status: implemented (plan …, all tasks landed)`.
+- 2026-09-30 — plan `2026-09-29-agent-harness.md`: Task 11's own docs-sync box flipped to `[x]` by
+  its author; the plan is now **59/59**. `CLAUDE.md` § `active-specs` re-stated from 58/59, and the
+  token-file permission and snapshot-flush behaviours recorded there.
+- 2026-09-30 — line-anchor sweep after the two insertions this range: `AiAgentServer.cpp:47-50`
+  (token path) and `DataFile.cpp:2041-2043` re-verified unshifted; new anchor
+  `AiAgentServer.cpp:75-77` added for the permission call.
 - 2026-09-30 — agent-harness cutover landed, `a929195ee..c5bb4e5a9` (20 commits). Deleted the
   in-app LLM path (`OpenAiClient`, `OpenAiStreamParser`, `AiClient.h`, `AiSession`,
   `AiPromptBuilder`, `AiChatView`, `data/ai/`, `ai_mock_server.py`, 4 tests); added
@@ -118,37 +134,26 @@ cap at 64 KB (`MaxXmlBytes`, `src/core/ai/AiProjectTools.cpp:350`).
   `moveTrackView` `:386` → `:428`, `Ctrl+Alt+S` `MainWindow.cpp:302` → `:300-301`, panel toggles
   `:432-458` → `:431-458`.
 - 2026-09-30 — plan `2026-09-29-agent-harness.md`: **58 step boxes flipped to `[x]`** on commit,
-  file and controller-ledger evidence. No task text altered. Task 11's own box left open.
+  file and controller-ledger evidence. No task text altered.
 - 2026-09-30 — open question "the superseded design is not marked superseded" **answered** and
   deleted: `835de8f83` added the `Status: superseded by …` line the new spec's §8 asked for.
-- 2026-09-30 — open question "13 uncommitted tracked files the design deletes" **answered** and
-  deleted: the work was committed as `95d161900` before the cutover removed those files.
-- 2026-09-30 — promoted into `CLAUDE.md` § `active-specs`: the NDJSON wire format, the token-file
-  rule and its `aboutToQuit` teardown, the 35-tool list, the explicit checkpoint/revert/commit
-  model, and the two controller rulings that deviate from the design.
-- 2026-09-29 — `a929195ee` added the harness design (269 lines), declaring itself superseding the
-  2026-09-16 design.
 
 ## Open questions
 
-1. **The governing spec's own status line is stale.** Below floor, but cheap and misleading:
-   `2026-09-29-agent-harness-design.md:4` still reads `Status: approved design, pending
-   implementation plan` after the whole plan landed. Prose outside a fence in a spec doc, so the
-   steward may not edit it; its author should, exactly as `835de8f83` did for the 2026-09-16 spec.
-2. **Song-Editor scroll-to-track lapsed without a decision.** Above floor, carried from three syncs.
+1. **Song-Editor scroll-to-track lapsed without a decision.** Above floor, carried from four syncs.
    The 2026-09-16 design §4 (`:197-198`) promised "tools that add a track scroll the Song Editor to
    it"; no tool does (`src/core/ai/AiProjectTools.cpp:428` is `moveTrackView` for `replace_track`
    positioning only), and the harness design does not carry the requirement forward. The Song Editor
    survived the cutover, so it is a dropped agreed requirement rather than a moot one.
-3. **The live smoke's success criterion is unmet, not failed.** Task 10 rendered a 56-bar five-track
+2. **The live smoke's success criterion is unmet, not failed.** Task 10 rendered a 56-bar five-track
    arrangement, `check_render` clean (peak −10.9 dBFS, 0 clipped, no silent bars), and the `.ogg`
    was shared to the user; the plan's criterion is the user's ear and that verdict has not come back
    (`progress.md:53`). The plan box is ticked for the work done; the judgement is outstanding.
-4. **Is the fork's agent surface ever intended for upstream?** `README.md:59` asks contributors to
+3. **Is the fork's agent surface ever intended for upstream?** `README.md:59` asks contributors to
    file an issue upstream before a big feature. Still unanswered, and the harness makes the fork's
    divergence larger, not smaller — `.claude/` and `CLAUDE.md` are now tracked, so they will appear
    in any upstream-facing diff.
-5. **Below floor, recorded.** Deferred minors from the task reviews live in
+4. **Below floor, recorded.** Deferred minors from the task reviews live in
    `.superpowers/sdd/2026-09-29-agent-harness/progress.md:25-50` and are not repeated here.
    `GuiApplication.h:118-121` declares the registry before the server it is passed to (benign: the
    server is a QObject child that is never deleted). The startup race — the server accepts before
@@ -167,7 +172,9 @@ Each names the observable condition that trips it.
    and tests pass while the code is not in the binary.
 3. A token, API key or default key value appears in a tracked file, or `AiAgentServer` binds
    anything but `127.0.0.1` → violates the harness design §6. The token belongs only in
-   `.lmms-agent.json` under the working directory, and that file must still be removed on quit.
+   `.lmms-agent.json` under the working directory; that file must still be removed on quit and
+   still be narrowed to `ReadOwner | WriteOwner` after writing
+   (`src/core/ai/AiAgentServer.cpp:75-77`).
 4. A window-level `setShortcut`/`QAction` duplicates a combination an editor handles in
    `keyPressEvent` (the editors test `modifiers() & Qt::ControlModifier` non-exclusively, so every
    `Ctrl`+extra+`A` variant is in scope) → the editor silently stops receiving it. `Ctrl+Alt+A` is
