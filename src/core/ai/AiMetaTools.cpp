@@ -42,7 +42,11 @@ void registerAiMetaTools(AiToolRegistry& r, AiProjectSnapshot& snapshot)
 	r.add({"checkpoint",
 		"WHAT: snapshot the whole project in memory so revert can restore it; replaces an earlier checkpoint. "
 		"WHEN: before a batch of edits. Undo history is paused until revert or commit.",
-		schema({}), [&snapshot](const QJsonObject&) { snapshot.take(); return R::ok(); }});
+		schema({}), [&snapshot](const QJsonObject&) {
+			snapshot.take();
+			// take() is a no-op without a song; nothing to revert to is a failure, not an ok.
+			return snapshot.held() ? R::ok() : R::error("No project open");
+		}});
 	r.add({"revert", "WHAT: reload the project from the last checkpoint and drop it (also discards edits made since). RETURNS ok, or error when none is held.",
 		schema({}), [&snapshot](const QJsonObject&) {
 			if (!snapshot.held()) { return R::error("No checkpoint held"); }

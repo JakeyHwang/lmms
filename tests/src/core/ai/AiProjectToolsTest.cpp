@@ -672,6 +672,15 @@ private slots:
 		QVERIFY(reg.call("commit", {})["ok"].toBool());
 		QVERIFY(!reg.call("revert", {})["ok"].toBool());
 	}
+	// A held checkpoint pauses the undo history so the agent's edits do not pile into it.
+	void checkpointPausesJournalling()
+	{
+		QVERIFY(lmms::Engine::projectJournal()->isJournalling());
+		QVERIFY(reg.call("checkpoint", {})["ok"].toBool());
+		QVERIFY(!lmms::Engine::projectJournal()->isJournalling());
+		QVERIFY(reg.call("commit", {})["ok"].toBool());
+		QVERIFY(lmms::Engine::projectJournal()->isJournalling());
+	}
 	void pingAndListTools()
 	{
 		auto p = reg.call("ping", {});

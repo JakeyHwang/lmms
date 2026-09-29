@@ -36,6 +36,7 @@ namespace lmms
 
 class AiToolRegistry;
 class AiPathPolicy;
+class AiProjectSnapshot;
 
 //! Project tools: summary, head (tempo/time signature/master), tracks, clips, notes, effects,
 //! parameters, automation, sample clips. `pathAllowed`, when set, gates every file path a tool
@@ -49,7 +50,6 @@ LMMS_EXPORT void registerAiDiscoveryTools(AiToolRegistry& r, AiPathPolicy& polic
 //! blocks the calling thread until the export finishes.
 LMMS_EXPORT void registerAiActionTools(AiToolRegistry& r, std::function<bool(const QString&)> pathAllowed = {});
 
-class AiProjectSnapshot;
 //! Meta tools: ping, list_tools, checkpoint / revert / commit over `snapshot`. `r` and `snapshot` must outlive the registry's use.
 LMMS_EXPORT void registerAiMetaTools(AiToolRegistry& r, AiProjectSnapshot& snapshot);
 

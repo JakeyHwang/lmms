@@ -45,7 +45,12 @@ class LMMS_EXPORT AiProjectSnapshot
 public:
 	//! Serialise the open project into memory; replaces any held snapshot. Journalling off.
 	void take();
-	//! Reload the project from the snapshot. False when none is held or the temp file failed. Journalling on.
+	/*! Reload the project from the snapshot and drop it; journalling back on.
+	 *
+	 * False when none is held, or when the temporary file could not be written. A failed restore
+	 * keeps the snapshot held and journalling off — the state a held checkpoint always implies —
+	 * so the caller can retry rather than lose the only copy of the project.
+	 */
 	bool restore();
 	//! Forget the snapshot. Journalling on.
 	void drop();

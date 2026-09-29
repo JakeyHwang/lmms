@@ -60,12 +60,14 @@ bool AiProjectSnapshot::restore()
 	// temporary file stays out of the recent-projects list.
 	const QString dir = m_fileName.isEmpty() ? QDir::tempPath() : QFileInfo(m_fileName).absolutePath();
 	QTemporaryFile tmp(dir + "/lmms-agent-checkpoint-XXXXXX");
+	// Every failure path here leaves the snapshot held and journalling off, so revert can be
+	// retried; the only copy of the project must never be dropped for a failed write.
 	if (!tmp.open())
 	{
 		tmp.setFileTemplate(QDir::tempPath() + "/lmms-agent-checkpoint-XXXXXX");
 		if (!tmp.open()) { return false; }
 	}
-	tmp.write(m_data);
+	if (tmp.write(m_data) != m_data.size()) { return false; }
 	tmp.close(); // still auto-removed on destruction
 	song->loadProject(tmp.fileName()); // leaves the song unmodified
 	song->setProjectFileName(m_fileName);
