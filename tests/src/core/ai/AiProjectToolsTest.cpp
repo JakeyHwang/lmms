@@ -28,6 +28,7 @@
 #include <QJsonArray>
 #include <QTemporaryDir>
 
+#include "AiProjectSnapshot.h"
 #include "AiToolRegistry.h"
 #include "AiTools.h"
 #include "AutomationClip.h"
@@ -46,6 +47,7 @@ class AiProjectToolsTest : public QObject
 {
 	Q_OBJECT
 	lmms::AiToolRegistry reg;
+	lmms::AiProjectSnapshot snap;
 
 	//! Plugins live in DLLs that import from lmms.exe, so they cannot be loaded into a test
 	//! process on Windows; elsewhere they need LMMS_PLUGIN_DIR to point at the plugin dir.
@@ -85,7 +87,7 @@ class AiProjectToolsTest : public QObject
 	}
 
 private slots:
-	void initTestCase() { lmms::Engine::init(true); lmms::registerAiProjectTools(reg); }
+	void initTestCase() { lmms::Engine::init(true); lmms::registerAiProjectTools(reg); lmms::registerAiMetaTools(reg, snap); }
 	void cleanupTestCase() { lmms::Engine::destroy(); }
 	void init() { lmms::Engine::getSong()->clearProject(); }
 
@@ -648,6 +650,61 @@ private slots:
 		QVERIFY(!reg.call("add_sample_clip", {{"file", file}, {"pos", 0}, {"track", it}})["ok"].toBool());
 		QVERIFY(!reg.call("add_sample_clip", {{"file", file}, {"pos", 0}, {"track", 9}})["ok"].toBool());
 		QCOMPARE(int(st->getClips().size()), 2);
+	}
+	void checkpointRevertRestoresProject()
+	{
+		reg.call("set_head", {{"bpm", 100}});
+		QVERIFY(reg.call("checkpoint", {})["ok"].toBool());
+		addBareInstrumentTrack("Added");
+		reg.call("set_head", {{"bpm", 140}});
+		QCOMPARE(int(lmms::Engine::getSong()->tracks().size()), 1);
+		auto r = reg.call("revert", {});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+		QCOMPARE(int(lmms::Engine::getSong()->tracks().size()), 0);
+		QCOMPARE(int(lmms::Engine::getSong()->getTempo()), 100);
+		QVERIFY(lmms::Engine::projectJournal()->isJournalling());
+	}
+	void revertWithoutCheckpointErrors()
+	{
+		QVERIFY(!reg.call("revert", {})["ok"].toBool());
+		QVERIFY(!reg.call("commit", {})["ok"].toBool());
+		QVERIFY(reg.call("checkpoint", {})["ok"].toBool());
+		QVERIFY(reg.call("commit", {})["ok"].toBool());
+		QVERIFY(!reg.call("revert", {})["ok"].toBool());
+	}
+	void pingAndListTools()
+	{
+		auto p = reg.call("ping", {});
+		QVERIFY(p["ok"].toBool());
+		QVERIFY(!p["version"].toString().isEmpty());
+		auto t = reg.call("list_tools", {});
+		QVERIFY(t["ok"].toBool());
+		QStringList names;
+		for (auto v : t["tools"].toArray()) { names << v.toObject()["function"].toObject()["name"].toString(); }
+		QVERIFY(names.contains("add_notes"));
+		QVERIFY(names.contains("list_tools"));
+	}
+	void addSf2TrackValidation()
+	{
+		QVERIFY(!reg.call("add_sf2_track", {{"name", "Piano"}})["ok"].toBool());                      // file required
+		QVERIFY(!reg.call("add_sf2_track", {{"name", "Piano"}, {"file", "C:/nope/x.sf2"}})["ok"].toBool()); // missing file
+		QTemporaryDir dir;
+		QFile f(dir.path() + "/k.sf2"); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("x"); f.close();
+		QVERIFY(!reg.call("add_sf2_track", {{"name", "P"}, {"file", f.fileName()}, {"bank", 200}})["ok"].toBool()); // bank range
+		QCOMPARE(int(lmms::Engine::getSong()->tracks().size()), 0);
+		if (!hasPlugin("sf2player")) { QSKIP("sf2player plugin not loadable in this test process"); }
+		auto r = reg.call("add_sf2_track", {{"name", "P"}, {"file", f.fileName()}, {"bank", 128}, {"patch", 0}});
+		QVERIFY2(r["ok"].toBool(), qPrintable(r["error"].toString()));
+	}
+	void addSf2TrackRespectsPathPolicy()
+	{
+		lmms::AiToolRegistry gated;
+		lmms::registerAiProjectTools(gated, [](const QString&) { return false; });
+		QTemporaryDir dir;
+		QFile f(dir.path() + "/k.sf2"); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("x"); f.close();
+		auto r = gated.call("add_sf2_track", {{"name", "P"}, {"file", f.fileName()}});
+		QVERIFY(!r["ok"].toBool());
+		QVERIFY(r["error"].toString().contains("not allowed"));
 	}
 };
 

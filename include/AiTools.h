@@ -49,6 +49,10 @@ LMMS_EXPORT void registerAiDiscoveryTools(AiToolRegistry& r, AiPathPolicy& polic
 //! blocks the calling thread until the export finishes.
 LMMS_EXPORT void registerAiActionTools(AiToolRegistry& r, std::function<bool(const QString&)> pathAllowed = {});
 
+class AiProjectSnapshot;
+//! Meta tools: ping, list_tools, checkpoint / revert / commit over `snapshot`. `r` and `snapshot` must outlive the registry's use.
+LMMS_EXPORT void registerAiMetaTools(AiToolRegistry& r, AiProjectSnapshot& snapshot);
+
 } // namespace lmms
 
 #endif // LMMS_AI_TOOLS_H

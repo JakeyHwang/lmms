@@ -166,6 +166,48 @@ static QJsonObject addInstrumentTrack(const QJsonObject& a)
 	return R::ok({{"index", index}});
 }
 
+// Both defined further down, with the XML surface they belong to.
+static QString elementToString(const QDomElement& e);
+static QJsonObject addTrackXml(const QJsonObject& a);
+
+//! Instrument track playing a SoundFont preset through sf2player, built as <track> XML so it goes
+//! through the same validation as add_track. Checks that need no plugin (file, path policy, ranges)
+//! run first so they hold in headless builds.
+static QJsonObject addSf2Track(const QJsonObject& a, const std::function<bool(const QString&)>& pathAllowed)
+{
+	const QString file = a["file"].toString();
+	if (file.isEmpty()) { return R::error("file is required (absolute path to a .sf2)"); }
+	if (pathAllowed && !pathAllowed(file)) { return R::error("Path not allowed: " + file); }
+	if (!QFileInfo(file).isFile()) { return R::error("No such file: " + file); }
+	const int bank = a["bank"].toInt(0);
+	const int patch = a["patch"].toInt(0);
+	if (bank < 0 || bank > 128 || patch < 0 || patch > 127) { return R::error("bank must be 0..128 (128 = drum kits) and patch 0..127"); }
+	const int mixerChannel = a["mixerChannel"].toInt(0);
+	if (mixerChannel < 0 || mixerChannel >= Engine::mixer()->numChannels())
+	{
+		return R::error(QString("mixerChannel must be 0..%1").arg(Engine::mixer()->numChannels() - 1));
+	}
+	if (PluginFactory::instance()->pluginInfo("sf2player").isNull()) { return R::error("sf2player plugin is not available in this build"); }
+
+	QDomDocument doc;
+	QDomElement track = doc.createElement("track");
+	track.setAttribute("type", int(Track::Type::Instrument));
+	track.setAttribute("name", a["name"].toString(QFileInfo(file).completeBaseName()));
+	QDomElement it = doc.createElement("instrumenttrack");
+	it.setAttribute("mixch", mixerChannel);
+	QDomElement inst = doc.createElement("instrument");
+	inst.setAttribute("name", "sf2player");
+	QDomElement sf2 = doc.createElement("sf2player");
+	sf2.setAttribute("src", file);
+	sf2.setAttribute("bank", bank);
+	sf2.setAttribute("patch", patch);
+	inst.appendChild(sf2);
+	it.appendChild(inst);
+	track.appendChild(it);
+	doc.appendChild(track);
+	return addTrackXml({{"xml", elementToString(track)}});
+}
+
 // --- Notes and clips ------------------------------------------------------------------------
 
 //! End (ticks from clip start) of the last-ending note in `notes`, 0 when empty.
@@ -890,6 +932,14 @@ void registerAiProjectTools(AiToolRegistry& r, std::function<bool(const QString&
 		"RETURNS {index} for add_clips/add_notes/set_track. Gotcha: omitting instrument gives a silent empty track.",
 		schema({{"name", prop("string", "track name, e.g. 'Bass'")}, {"instrument", prop("string", "plugin name from list_instruments, e.g. tripleoscillator, kicker, sf2player")},
 			{"mixerChannel", mixerIndex}}), addInstrumentTrack});
+	r.add({"add_sf2_track",
+		"WHAT: append an instrument track playing one SoundFont preset (sf2player). WHEN: realistic instruments: piano, guitars, bass, drum kits, strings, brass — the default palette. "
+		"bank 0 = melodic GM patches (0 piano, 33 finger bass, 27 clean guitar, 29 overdriven, 30 distortion, 48 strings), bank 128 = drum kits (patch 0 standard; GM drum map: 36 kick, 38 snare, 42 closed hat, 46 open hat, 49 crash, 51 ride). "
+		"RETURNS {index}. Gotcha: file must be an absolute path inside the allowed roots (the LMMS working directory's samples/soundfonts/ is).",
+		schema({{"name", prop("string", "track name")}, {"file", prop("string", "absolute path to the .sf2")},
+			{"bank", prop("integer", "0..128, default 0; 128 = drum kits")}, {"patch", prop("integer", "0..127 GM program, default 0")},
+			{"mixerChannel", mixerIndex}}, {"file"}),
+		[pathAllowed](const QJsonObject& a) { return addSf2Track(a, pathAllowed); }});
 	r.add({"add_notes",
 		"WHAT: write notes into one MIDI clip on an instrument track, creating the clip at clipPos if missing. WHEN: a single clip, or editing one (clear:true replaces its notes); several clips per track → add_clips. "
 		"UNITS: ticks (192/bar in 4/4: quarter 48, eighth 24, sixteenth 12); note pos is relative to the clip. RETURNS {track, clipPos, len, noteCount}. Gotcha: without len the clip auto-grows to whole bars covering its notes.",

@@ -94,7 +94,9 @@ set(LMMS_SRCS
 	core/ai/AiActionTools.cpp
 	core/ai/AiConfig.cpp
 	core/ai/AiDiscoveryTools.cpp
+	core/ai/AiMetaTools.cpp
 	core/ai/AiPathPolicy.cpp
+	core/ai/AiProjectSnapshot.cpp
 	core/ai/AiProjectTools.cpp
 	core/ai/AiPromptBuilder.cpp
 	core/ai/AiSession.cpp
