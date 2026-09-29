@@ -363,17 +363,17 @@ def main(argv: list[str] | None = None) -> int:
 			args = _collect_args(options.args, options.args_file)
 		with Lmms(timeout=options.timeout) as lmms:
 			if options.command == "tools":
-				tool = "list_tools"
-				result = lmms.call(tool)
-				if result.get("ok"):
-					_print_tools(result.get("tools") or [], options.schema)
-					return 0
-			elif options.command == "summary":
+				_print_tools(lmms.tools(), options.schema)
+				return 0
+			if options.command == "summary":
 				tool = "get_project_summary"
 				result = lmms.call(tool, {})
 			else:
 				tool = options.tool
 				result = lmms.call(tool, args)
+	except LmmsToolError as error:
+		print(f"lmmsctl: {error}", file=sys.stderr)
+		return 1
 	except LmmsError as error:
 		print(f"lmmsctl: {error}", file=sys.stderr)
 		return 2

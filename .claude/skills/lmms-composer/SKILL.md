@@ -24,9 +24,13 @@ authoritative schema.
 3. Handshake: `python .claude/skills/lmms-composer/scripts/lmmsctl.py call ping` → `{"ok": true,
    "version": "…"}`. Then `… lmmsctl.py tools` — it must list **35** tools.
 
-The client finds LMMS through the token file `{"port", "token"}` at `<workingdir>/.lmms-agent.json`
-(`$LMMS_AGENT_FILE` overrides it). `<workingdir>` is the LMMS working directory, `C:/Users/<you>/lmms/`
-by default.
+The client finds LMMS through the token file `{"port", "token"}` named `.lmms-agent.json`, written
+in the LMMS working directory. It is looked for in this order, first hit wins: `$LMMS_AGENT_FILE`
+(a full path to the file, and nothing else is tried), the `workingdir` in `~/.lmmsrc.xml` when that
+file exists, `~/Documents/lmms`, `~/OneDrive/Documents/lmms`, `~/lmms`. A development build keeps
+its `.lmmsrc.xml` next to the executable in `build/` rather than in `$HOME`, so there the working
+directory is the Documents one — `C:/Users/<you>/OneDrive/Documents/lmms/` when OneDrive has
+redirected Documents. `lmmsctl.py` prints every path it tried when it finds none.
 
 **No token file, or `ping` exits 2:** LMMS is not running, or the setting is off. Say exactly that —
 "LMMS isn't exposing the agent server: open Settings → AI, tick *Allow an external agent to control

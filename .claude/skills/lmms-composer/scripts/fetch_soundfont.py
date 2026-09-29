@@ -57,7 +57,7 @@ def _log(message: str) -> None:
 def default_dest() -> Path:
     """``<workingdir>/samples/soundfonts``.
 
-    The LMMS working directory is resolved through ``lmmsctl.token_file_path()``
+    The LMMS working directory is resolved through ``lmmsctl.working_dir()``
     -- the same rule the control client uses to find ``.lmms-agent.json``. The
     import is deliberately lazy and guarded: ``--dest`` must keep working even
     when ``lmmsctl.py`` is missing or broken.
@@ -69,7 +69,7 @@ def default_dest() -> Path:
             sys.path.insert(0, script_dir)
         import lmmsctl  # noqa: PLC0415 -- lazy on purpose, see docstring
 
-        base = Path(lmmsctl.token_file_path()).resolve().parent
+        base = Path(lmmsctl.working_dir()).resolve()
     except Exception as exc:  # noqa: BLE001 -- any failure falls back
         _log(f"note: falling back to the default working directory ({exc})")
     if base is None:
