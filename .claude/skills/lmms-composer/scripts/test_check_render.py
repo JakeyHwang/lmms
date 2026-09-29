@@ -39,6 +39,31 @@ def write_wav(path, frames, channels, sampwidth, rate=RATE):
         w.writeframes(data)
 
 
+def write_float_wav(path, frames, channels, rate=RATE):
+    """Write an IEEE-float WAV by hand: `wave` cannot, and LMMS's 32-bit
+    export is float (libsndfile SF_FORMAT_FLOAT). The unused `fact` chunk is
+    what libsndfile emits for non-PCM data, so the reader must skip it."""
+    data = struct.pack("<%df" % len(frames), *frames)
+    fmt = struct.pack("<HHIIHH", 3, channels, rate, rate * channels * 4, channels * 4, 32)
+    fact = struct.pack("<I", len(frames) // channels)
+    body = (
+        b"WAVE"
+        + b"fmt " + struct.pack("<I", len(fmt)) + fmt
+        + b"fact" + struct.pack("<I", len(fact)) + fact
+        + b"data" + struct.pack("<I", len(data)) + data
+    )
+    Path(path).write_bytes(b"RIFF" + struct.pack("<I", len(body)) + body)
+
+
+def float_sine(n_frames, channels, amplitude, rate=RATE, freq=440.0):
+    """Interleaved float sine, `amplitude` relative to 1.0 full scale."""
+    out = []
+    for i in range(n_frames):
+        v = amplitude * math.sin(2.0 * math.pi * freq * i / rate)
+        out.extend([v] * channels)
+    return out
+
+
 def sine(n_frames, channels, amplitude, rate=RATE, freq=440.0):
     """Interleaved integer sine, `amplitude` in raw sample units."""
     out = []
@@ -131,6 +156,32 @@ class CheckRenderTest(unittest.TestCase):
         self.assertAlmostEqual(report["duration_s"], 1.0, places=3)
         self.assertAlmostEqual(report["peak_dbfs"], -6.0, delta=0.2)
         self.assertEqual(report["clipped_samples"], 0)
+
+    def test_float32_is_read_with_unity_full_scale(self):
+        """LMMS's 32-bit export is IEEE float, which `wave` refuses."""
+        clean = self.dir / "float32.wav"
+        amp = 10.0 ** (-6.0 / 20.0)
+        write_float_wav(clean, float_sine(RATE, 2, amp), channels=2)
+
+        report = check_render.analyze(clean, bpm=120.0)
+        self.assertEqual(report["channels"], 2)
+        self.assertEqual(report["sample_rate"], RATE)
+        self.assertAlmostEqual(report["duration_s"], 1.0, places=3)
+        self.assertAlmostEqual(report["peak_dbfs"], -6.0, delta=0.2)
+        self.assertEqual(report["clipped_samples"], 0)
+        self.assertEqual(report["silent_bars"], [])
+        self.assertEqual(self.run_cli(str(clean))[0], 0)
+
+        # Full scale is 1.0, so anything at or past it is clipping.
+        hot = self.dir / "float32_hot.wav"
+        frames = float_sine(RATE, 2, amp)
+        frames[:8] = [1.25] * 8
+        write_float_wav(hot, frames, channels=2)
+
+        report = check_render.analyze(hot)
+        self.assertEqual(report["clipped_samples"], 8)
+        self.assertGreater(report["peak_dbfs"], 0.0)
+        self.assertEqual(self.run_cli(str(hot))[0], 1)
 
 
 if __name__ == "__main__":
