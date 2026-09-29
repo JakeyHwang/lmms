@@ -69,7 +69,7 @@ Entry points:
   control LMMS over localhost"* (i.e. `<ai agentserver="0"/>` in `.lmmsrc.xml`) to disable it.
   Start `build/lmms.exe`, wait for
   `AiAgentServer: listening on 127.0.0.1:<port>`, then
-  `python .claude/skills/lmms-composer/scripts/lmmsctl.py tools` — it lists **35** tools.
+  `python .claude/skills/lmms-composer/scripts/lmmsctl.py tools` — it lists **36** tools.
   `check_render.py` sanity-checks the resulting `.wav` (peak dBFS, clipped samples, silent bars).
 - Local build in this fork is MSYS2 CLANG64 + Ninja in `build/`. A plain login shell has no `cmake`
   on `PATH`; the working form is
@@ -193,16 +193,21 @@ The server is started late on purpose: `GuiApplication::startAgentServer()` is c
 the first request can never land while the song is being set up (the old constructor-time start
 let an agent remove tracks that project setup then deleted again).
 
-**35 registered tools**, across four tables: `add_automation`, `add_clips`, `add_effect`,
+**36 registered tools**, across four tables: `add_automation`, `add_clips`, `add_effect`,
 `add_instrument_track`, `add_notes`, `add_sample_clip`, `add_sf2_track`, `add_track`, `checkpoint`,
-`commit`, `describe_model_tree`, `get_head`, `get_mixer_xml`, `get_preset_xml`,
+`commit`, `describe_model_tree`, `export_midi`, `get_head`, `get_mixer_xml`, `get_preset_xml`,
 `get_project_summary`, `get_track_xml`, `list_effects`, `list_instruments`, `list_presets`,
 `list_samples`, `list_tools`, `new_project`, `ping`, `play`, `remove_clip`, `remove_track`,
 `render`, `replace_track`, `revert`, `save`, `set_head`, `set_mixer_xml`, `set_params`, `set_track`,
-`stop`. Registration order is project (20), discovery (5), action (5), meta (5) —
+`stop`. Registration order is project (20), discovery (5), action (6), meta (5) —
 `src/gui/GuiApplication.cpp:232-235`. XML tool results cap at 64 KB (`MaxXmlBytes`,
 `src/core/ai/AiProjectTools.cpp:350`). `.claude/skills/lmms-composer/references/tools.md` documents
-all 35 in prose; `lmmsctl.py tools --schema` is the authoritative schema.
+all 36 in prose; `lmmsctl.py tools --schema` is the authoritative schema.
+
+`export_midi` (`src/core/ai/AiActionTools.cpp:171-189`) is the DAW hand-off: it instantiates the
+`midiexport` plugin directly and calls `ExportFilter::tryExport` over `Song::tracks()` plus
+`Engine::patternStore()->tracks()`, rather than `Song::exportProjectMidi()`, which swallows
+failures. Same path-policy and `outputPathError` gate as `save`/`render`; returns `{path, bytes}`.
 
 **Undo/redo is now explicit, not per-turn.** `AiProjectSnapshot` holds one whole-project buffer:
 `checkpoint` calls `take()` (`Song::saveProjectData(DataFile&)`, `include/Song.h:256`, and turns
@@ -229,6 +234,6 @@ One requirement from the *old* design lapsed rather than being decided: §4 (`:1
 `src/core/ai/` is `moveTrackView` for `replace_track` positioning
 (`src/core/ai/AiProjectTools.cpp:428`). The Song Editor survived the cutover, so this is still open.
 The old `render`-blocking deviation is **closed**: the nested
-`loop.exec(QEventLoop::ExcludeUserInputEvents)` (`src/core/ai/AiActionTools.cpp:130-134`) is what the
+`loop.exec(QEventLoop::ExcludeUserInputEvents)` (`src/core/ai/AiActionTools.cpp:138`) is what the
 harness design §6 approves. Do not re-raise it.
 <!-- /claude:auto:active-specs -->

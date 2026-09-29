@@ -2,8 +2,8 @@
   "version": 1,
   "repo": "lmms",
   "bootstrappedAt": "2026-09-16",
-  "lastSyncedCommit": "daf34b47b",
-  "lastSyncedRange": "554d1d545e641384216ac9233d8e38d8c37b4872..daf34b47bca76b57f81c2dfbadb10fab27fae115",
+  "lastSyncedCommit": "2fd75de3e",
+  "lastSyncedRange": "b6e85ef69bb4915baa7defadba62a2c828f62b68..2fd75de3e27bdb8e3896084639277341846a9237",
   "fenceFormat": {
     "open": "<!-- claude:auto:<slug> -->",
     "close": "<!-- /claude:auto:<slug> -->"
@@ -40,7 +40,7 @@
     },
     {
       "path": ".claude/skills/lmms-composer/**",
-      "reason": "agent-authored skill content owned by its implementing task, not steward-managed. Read it for evidence (tool count, frontmatter, token-file rule); never rewrite it. A drift between its 35 tool sections and the registry is a reported finding, not a steward edit.",
+      "reason": "agent-authored skill content owned by its implementing task, not steward-managed. Read it for evidence (tool count, frontmatter, token-file rule); never rewrite it. A drift between its 36 tool sections and the registry is a reported finding, not a steward edit.",
       "revisitIf": "the user asks the steward to own the skill's docs"
     },
     {
@@ -104,6 +104,11 @@
     "2026-09-30 fix wave 554d1d545..daf34b47b, 4 files +61/-34, all modified: the agent server is started by the new GuiApplication::startAgentServer() (include/GuiApplication.h:95, src/gui/GuiApplication.cpp:207-241) from src/core/main.cpp:915 after the initial project exists, not from the GuiApplication constructor; deleteTrack (src/core/ai/AiProjectTools.cpp:441-458) deletes through TrackContainerView::deleteTrackView when a GUI is present. Line-anchor recheck: GuiApplication.cpp:229-231 -> :238-240 and :223-226 -> :232-235 (the constructor block moved down ~9 lines); AiAgentServer.cpp:47-50 and :75-77, AiProjectTools.cpp:350 and :428, DataFile.cpp:2041-2043 all UNSHIFTED (the AiProjectTools insertion is at :443-455, below both anchors). GuiApplication.h:118-121 -> :121-124.",
     "2026-09-30 CLOSED: the startup race (server accepting before main.cpp finished loadProject) is fixed in code by daf34b47b. Do not re-raise it, and do not re-add the 'call get_project_summary first' convention as a mitigation.",
     "2026-09-30: 'with a GUI, never delete a Track before its TrackView' was PROMOTED out of PROJECT_CONTEXT into CLAUDE.md section code-layout - it is a durable layout rule, not derivable scratch state. Reference implementation AiProjectTools.cpp:441-458; the deleting API is TrackContainerView::deleteTrackView (include/TrackContainerView.h:157, src/gui/editors/TrackContainerView.cpp:287).",
-    "2026-09-30: the harness spec's section 6 gained one bullet (:230-233) for the start-up ordering, on explicit dispatch instruction. Section 1's ownership paragraph (:58-60) still reads 'GuiApplication creates the server after MainWindow exists' - still true, since startAgentServer is a GuiApplication method, so it was left alone."
+    "2026-09-30: the harness spec's section 6 gained one bullet (:230-233) for the start-up ordering, on explicit dispatch instruction. Section 1's ownership paragraph (:58-60) still reads 'GuiApplication creates the server after MainWindow exists' - still true, since startAgentServer is a GuiApplication method, so it was left alone.",
+    "2026-09-30 range b6e85ef69..2fd75de3e, 1 commit, 4 files +78/-4, all modified: export_midi added to the action table (src/core/ai/AiActionTools.cpp:171-189 and :228-233), two cases added to AiActionToolsTest (:193-216), SKILL.md and references/tools.md updated by the implementing agent in the same commit. Tool count 35 -> 36, action table 5 -> 6, tools.md ### count 36. Counted from 'r.add({\"' : project 20, discovery 5, action 6, meta 5.",
+    "2026-09-30 ANCHOR SHIFT: four #include lines were added at the top of AiActionTools.cpp this range, so everything below shifted +4. The approved render-blocking loop.exec(QEventLoop::ExcludeUserInputEvents) is now AiActionTools.cpp:138 (was :130-134) and CLAUDE.md section active-specs was corrected. Re-verified UNSHIFTED: AiProjectTools.cpp:350 (MaxXmlBytes), :428 (moveTrackView), :441-458 (deleteTrack), GuiApplication.cpp:232-235, main.cpp:915, AiAgentServer.cpp:75-77.",
+    "2026-09-30: the 2026-09-29 harness spec's section 3 tool table gained an export_midi row (:144) on explicit dispatch instruction - the second time a fence-free edit to that spec was directed (the first was section 6's start-up bullet). The row is labelled 'added after this design landed' so the file still reads as the approved design. Do not extend this into a habit without an explicit instruction.",
+    "2026-09-30 path sweep: every file, directory and command path named in CLAUDE.md and PROJECT_CONTEXT.md resolves against the tree at 2fd75de3e. No path went dead this range (4 files, all modified, none added/deleted/renamed). New paths verified to exist: plugins/MidiExport, include/ExportFilter.h, include/PatternStore.h. src/core/ai/ holds 10 entries; tests/CMakeLists.txt holds 13.",
+    "2026-09-30 below floor, recorded: export_midi's write path has no headless coverage - exportMidiWritesFile QSKIPs when PluginFactory::pluginInfo('midiexport') is null, which is the case in this build (AiActionToolsTest.cpp:205). Same class as every other plugin-dependent tool case; not a new deviation."
   ]
 }

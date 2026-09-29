@@ -141,6 +141,7 @@ Registered in the same `AiToolRegistry` so `list_tools` describes them.
 | `revert` | — | `AiProjectSnapshot::restore()`: reload the snapshot via the temp-file path `AiSession::revertLastTurn` used; project file name and modified flag restored; journalling on; snapshot cleared. Error if none held. |
 | `commit` | — | drop the snapshot, journalling on. Error if none held. |
 | `add_sf2_track` | `name, file, bank?=0, patch?=0, mixerChannel?` | Builds `<track type="0" name><instrumenttrack …><instrument name="sf2player"><sf2player src bank patch/></instrument></instrumenttrack></track>` and routes it through the same validation as `add_track`. `file` gated by the path policy. Returns `{index}`. GM drum kits are bank 128. |
+| `export_midi` | `path` (required) | Added after this design landed, for DAW/GarageBand hand-off. Instantiates the `midiexport` plugin and calls `ExportFilter::tryExport` over `Song::tracks()` + `Engine::patternStore()->tracks()` (not `Song::exportProjectMidi`, which swallows failures); `.mid` appended when missing, same path-policy gate as `save`/`render`. Returns `{path, bytes}`. |
 
 `AiProjectSnapshot` is the extracted `beginTurnCheckpoint` / `revertLastTurn`
 logic from `AiSession.cpp:206-249`, as a plain class with `take()`, `restore()`,
