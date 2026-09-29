@@ -144,7 +144,7 @@ Registered in the same `AiToolRegistry` so `list_tools` describes them.
 
 `AiProjectSnapshot` is the extracted `beginTurnCheckpoint` / `revertLastTurn`
 logic from `AiSession.cpp:206-249`, as a plain class with `take()`, `restore()`,
-`drop()`, `held()`. Registered by a new `registerAiMetaTools(AiToolRegistry&, AiProjectSnapshot&, std::function<bool(const QString&)> pathAllowed)` in `AiTools.h`; `add_sf2_track` lives in `AiProjectTools.cpp` beside `add_instrument_track`.
+`drop()`, `held()`. Registered by a new `registerAiMetaTools(AiToolRegistry&, AiProjectSnapshot&)` in `AiTools.h`; `add_sf2_track` lives in `AiProjectTools.cpp` beside `add_instrument_track`.
 
 Meta-tools are registered by the server's owner, not by `AiAgentServer`
 itself, so tests can run the server against a registry with only `ping`.

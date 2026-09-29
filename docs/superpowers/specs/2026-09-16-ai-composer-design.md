@@ -1,7 +1,7 @@
 # AI Composer — design
 
 Date: 2026-09-16
-Status: approved design, pending implementation plan
+Status: superseded by `2026-09-29-agent-harness-design.md` (the in-app LLM loop and chat panel were removed; the tool layer described in §2 lives on behind the agent server)
 
 ## Goal
 
