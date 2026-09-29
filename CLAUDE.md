@@ -34,8 +34,9 @@ Entry points:
 - Everything else compiles into the `lmmsobjs` OBJECT library (`src/CMakeLists.txt:104`), which both
   `lmms` and every test link against.
 - GUI bootstrap: `src/gui/MainApplication.cpp` → `GuiApplication.cpp` → `MainWindow.cpp`.
-- Agent entry: `GuiApplication` starts `AiAgentServer` when `ai/agentserver` is set
-  (`src/gui/GuiApplication.cpp:201-232`) — it registers all four tool tables into the
+- Agent entry: `GuiApplication` starts `AiAgentServer` unless `ai/agentserver` is `"0"` — on by
+  default, an absent key meaning enabled (`AiConfig::load`, `src/core/ai/AiConfig.cpp:32-39`;
+  `src/gui/GuiApplication.cpp:201-232`) — it registers all four tool tables into the
   `AiToolRegistry` it owns and listens on `127.0.0.1`, ephemeral port. The external half is
   `.claude/skills/lmms-composer/scripts/lmmsctl.py`; there is no in-app UI for it beyond the
   settings checkbox.
@@ -62,8 +63,9 @@ Entry points:
 - Headless tests cannot load instrument/effect plugin DLLs in this build (the plugins import symbols
   from `lmms.exe`), so plugin-dependent tool cases `QSKIP` — those paths are only covered by the
   live agent smoke.
-- Live smoke: tick *Settings → AI → "Allow an external agent to control LMMS over localhost"* (or
-  write `<ai agentserver="1"/>` into `.lmmsrc.xml`), start `build/lmms.exe`, wait for
+- Live smoke: the server is on by default; untick *Settings → AI → "Allow an external agent to
+  control LMMS over localhost"* (i.e. `<ai agentserver="0"/>` in `.lmmsrc.xml`) to disable it.
+  Start `build/lmms.exe`, wait for
   `AiAgentServer: listening on 127.0.0.1:<port>`, then
   `python .claude/skills/lmms-composer/scripts/lmmsctl.py tools` — it lists **35** tools.
   `check_render.py` sanity-checks the resulting `.wav` (peak dBFS, clipped samples, silent bars).

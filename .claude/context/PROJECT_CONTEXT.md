@@ -26,7 +26,7 @@ at `805c31c5c` and all of them still exist.
 | GUI bootstrap | `src/gui/MainApplication.cpp` → `GuiApplication.cpp` → `MainWindow.cpp` |
 | Settings dialog | `MainWindow::showSettingsDialog()` (`include/MainWindow.h:156`, `src/gui/MainWindow.cpp:887`); page ids in the `ConfigTab` enum (`include/SetupDialog.h:55-63`, ending `AiSettings`) |
 | Subwindow panels | `MainWindow::addWindowedWidget` (`include/MainWindow.h:69`); example `src/gui/ControllerRackView.cpp:82` |
-| **Agent server** | `lmms::AiAgentServer` (`include/AiAgentServer.h`, `src/core/ai/AiAgentServer.cpp`), started by `GuiApplication::init` when `ai/agentserver` is set (`src/gui/GuiApplication.cpp:201-232`) |
+| **Agent server** | `lmms::AiAgentServer` (`include/AiAgentServer.h`, `src/core/ai/AiAgentServer.cpp`), started by `GuiApplication::init` unless `ai/agentserver` is `"0"` — on by default, an absent key means enabled (`src/core/ai/AiConfig.cpp:32-39`, `src/gui/GuiApplication.cpp:201-232`) |
 | Agent client | `.claude/skills/lmms-composer/scripts/lmmsctl.py` (`tools`, `summary`, `call <tool>`) |
 | Tool tables | `registerAiProjectTools` / `…Discovery` / `…Action` / `…Meta` (`include/AiTools.h`) into one `AiToolRegistry` owned by `GuiApplication` |
 | Path safety | `lmms::AiPathPolicy` (`include/AiPathPolicy.h`) — roots only; `allowFromUserText` is gone |
@@ -90,7 +90,7 @@ cap at 64 KB (`MaxXmlBytes`, `src/core/ai/AiProjectTools.cpp:350`).
   `bash -lc 'export MSYSTEM=CLANG64 PATH=/clang64/bin:$PATH; cd /c/git_repos/lmms && cmake --build build'`
   then `build/tests/<Name>.exe -o <file>,txt` (the exes print nothing to the MSYS console).
 - Headless smoke: `lmms render tests/emptyproject.mmp`.
-- Live smoke: enable the setting, start `build/lmms.exe`, wait for
+- Live smoke: the agent server is on by default; start `build/lmms.exe`, wait for
   `AiAgentServer: listening on 127.0.0.1:<port>`, then `lmmsctl.py tools` → 35.
 - Headless tests cannot load plugin DLLs in this build (plugins import from `lmms.exe`), so
   plugin-dependent tool cases `QSKIP`; those paths are proven only by the live smoke.
@@ -101,6 +101,11 @@ cap at 64 KB (`MaxXmlBytes`, `src/core/ai/AiProjectTools.cpp:350`).
 
 ## Recent changes
 
+- 2026-09-30 — agent server is **on by default**, `2f7dbf314` (4 files): `AiConfig::agentServer`
+  defaults `true` and `AiConfig::load` only overrides it when the `ai/agentserver` key is present,
+  so an absent key means enabled and `"0"` disables (`src/core/ai/AiConfig.cpp:32-39`). Spec §4 and
+  `SKILL.md` were updated by their author; `CLAUDE.md` § `project-structure` / § `build-and-test`
+  and this file's entry-points and verification lines re-stated to match.
 - 2026-09-30 — harness fix wave landed, `4e0f15a1c..805c31c5c` (3 commits, 17 files, +20/−16):
   spec status → `implemented`; every remaining "AI Composer" comment across `include/`,
   `src/core/ai/`, `src/core/DataFile.cpp` and `tests/src/core/ai/` swept to "agent harness";
@@ -135,8 +140,6 @@ cap at 64 KB (`MaxXmlBytes`, `src/core/ai/AiProjectTools.cpp:350`).
   `:432-458` → `:431-458`.
 - 2026-09-30 — plan `2026-09-29-agent-harness.md`: **58 step boxes flipped to `[x]`** on commit,
   file and controller-ledger evidence. No task text altered.
-- 2026-09-30 — open question "the superseded design is not marked superseded" **answered** and
-  deleted: `835de8f83` added the `Status: superseded by …` line the new spec's §8 asked for.
 
 ## Open questions
 
