@@ -27,6 +27,8 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QList>
+#include <QPointer>
 #include <QRandomGenerator>
 #include <QSaveFile>
 #include <QTcpServer>
@@ -61,15 +63,15 @@ bool AiAgentServer::start(AiToolRegistry* registry, const QString& tokenFilePath
 	QByteArray raw(32, Qt::Uninitialized);
 	QRandomGenerator::system()->fillRange(reinterpret_cast<quint32*>(raw.data()), raw.size() / int(sizeof(quint32)));
 	m_token = QString::fromLatin1(raw.toHex());
-	m_tokenFile = tokenFilePath;
-	QSaveFile f(m_tokenFile);
+	QSaveFile f(tokenFilePath);
 	const QJsonObject info{{"port", int(m_server->serverPort())}, {"token", m_token}};
 	if (!f.open(QIODevice::WriteOnly) || f.write(QJsonDocument(info).toJson(QJsonDocument::Compact) + '\n') < 0 || !f.commit())
 	{
-		qWarning("AiAgentServer: could not write %s: %s", qPrintable(m_tokenFile), qPrintable(f.errorString()));
-		stop();
+		qWarning("AiAgentServer: could not write %s: %s", qPrintable(tokenFilePath), qPrintable(f.errorString()));
+		stop(); // m_tokenFile is still empty, so nothing at tokenFilePath is touched
 		return false;
 	}
+	m_tokenFile = tokenFilePath;
 	connect(m_server, &QTcpServer::newConnection, this, &AiAgentServer::onNewConnection);
 	qInfo("AiAgentServer: listening on 127.0.0.1:%u, token file %s", m_server->serverPort(), qPrintable(m_tokenFile));
 	return true;
@@ -90,7 +92,25 @@ void AiAgentServer::stop()
 		m_server->deleteLater();
 		m_server = nullptr;
 	}
-	if (!m_tokenFile.isEmpty()) { QFile::remove(m_tokenFile); m_tokenFile.clear(); }
+	if (!m_tokenFile.isEmpty())
+	{
+		// Windows refuses to unlink a file that anyone still holds open without FILE_SHARE_DELETE.
+		// Leaving a readable port/token behind is worse than leaving an empty file, so truncate it.
+		if (!QFile::remove(m_tokenFile) && QFile::exists(m_tokenFile))
+		{
+			QFile stale(m_tokenFile);
+			if (stale.open(QIODevice::WriteOnly | QIODevice::Truncate))
+			{
+				qWarning("AiAgentServer: could not remove %s; truncated it instead", qPrintable(m_tokenFile));
+			}
+			else
+			{
+				qWarning("AiAgentServer: could not remove or truncate %s: %s", qPrintable(m_tokenFile),
+					qPrintable(stale.errorString()));
+			}
+		}
+		m_tokenFile.clear();
+	}
 	m_token.clear();
 	m_registry = nullptr;
 }
@@ -117,6 +137,17 @@ void AiAgentServer::onReadyRead(QTcpSocket* socket)
 	auto it = m_buffers.find(socket);
 	if (it == m_buffers.end()) { return; }
 	it->append(socket->readAll());
+	// Cap the unterminated tail here, not in drainAll: while a handler runs (render's nested loop)
+	// drainAll is suppressed, and a client that never sends a newline would grow the buffer forever.
+	if (it->size() > MaxLineBytes && it->size() - (it->lastIndexOf('\n') + 1) > MaxLineBytes)
+	{
+		socket->write(QJsonDocument(QJsonObject{{"id", QJsonValue::Null}, {"error", "line too long"}})
+						  .toJson(QJsonDocument::Compact)
+			+ '\n');
+		socket->disconnectFromHost();
+		m_buffers.remove(socket);
+		return;
+	}
 	if (m_dispatching) { return; } // a handler is running (e.g. render's nested loop); drained afterwards
 	drainAll();
 }
@@ -128,30 +159,32 @@ void AiAgentServer::drainAll()
 	while (progressed)
 	{
 		progressed = false;
-		for (auto socket : m_buffers.keys())
+		// A copy, and guarded: a handler may run a nested event loop in which sockets are accepted,
+		// disconnected and deleted. QPointer keeps a freed socket from matching a new one allocated
+		// at the same address (the lookups below are by address).
+		QList<QPointer<QTcpSocket>> sockets;
+		sockets.reserve(m_buffers.size());
+		for (auto socket : m_buffers.keys()) { sockets.append(socket); }
+		for (const QPointer<QTcpSocket>& sock : sockets)
 		{
-			auto it = m_buffers.find(socket);
+			if (!sock) { continue; }
+			auto it = m_buffers.find(sock.data());
 			if (it == m_buffers.end()) { continue; }
-			const int nl = it->indexOf('\n');
-			if (nl < 0)
-			{
-				if (it->size() > MaxLineBytes)
-				{
-					socket->write(QJsonDocument(QJsonObject{{"id", QJsonValue::Null}, {"error", "line too long"}}).toJson(QJsonDocument::Compact) + '\n');
-					socket->disconnectFromHost();
-					m_buffers.remove(socket);
-					progressed = true;
-				}
-				continue;
-			}
+			const qsizetype nl = it->indexOf('\n');
+			if (nl < 0) { continue; } // over-long unterminated lines are dropped in onReadyRead
 			const QByteArray line = it->left(nl);
 			it->remove(0, nl + 1);
 			bool closeAfter = false;
-			const QByteArray reply = handleLine(line, &closeAfter);  // may run a nested event loop
-			if (!m_buffers.contains(socket)) { continue; }           // client went away meanwhile
-			socket->write(reply);
-			if (closeAfter) { socket->disconnectFromHost(); m_buffers.remove(socket); }
-			progressed = true;
+			const QByteArray reply = handleLine(line, &closeAfter); // may run a nested event loop
+			progressed = true;                                      // the line was consumed either way
+			// Client went away meanwhile; `it` may also be dangling by now, so it is not reused.
+			if (!sock || !m_buffers.contains(sock.data())) { continue; }
+			sock->write(reply);
+			if (closeAfter)
+			{
+				sock->disconnectFromHost();
+				m_buffers.remove(sock.data());
+			}
 		}
 	}
 	m_dispatching = false;

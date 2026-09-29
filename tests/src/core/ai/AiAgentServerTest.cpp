@@ -22,15 +22,32 @@
  *
  */
 
+#include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QStringList>
 #include <QTcpSocket>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QtTest>
 
 #include "AiAgentServer.h"
 #include "AiToolRegistry.h"
+
+namespace
+{
+//! Handler-entry bookkeeping shared by the "ping" and "slow" tools; reset per test case that reads it.
+int g_depth = 0;
+int g_maxDepth = 0;
+QStringList g_events;
+
+void enterHandler(const char* what)
+{
+	g_events << QString::fromLatin1(what);
+	if (++g_depth > g_maxDepth) { g_maxDepth = g_depth; }
+}
+} // namespace
 
 class AiAgentServerTest : public QObject
 {
@@ -58,7 +75,20 @@ class AiAgentServerTest : public QObject
 private slots:
 	void initTestCase()
 	{
-		reg.add({"ping", "", {{"type", "object"}}, [](const QJsonObject&) { return lmms::AiToolRegistry::ok({{"pong", true}}); }});
+		reg.add({"ping", "", {{"type", "object"}}, [](const QJsonObject&) {
+			enterHandler("ping");
+			--g_depth;
+			return lmms::AiToolRegistry::ok({{"pong", true}});
+		}});
+		reg.add({"slow", "", {{"type", "object"}}, [](const QJsonObject&) {
+			enterHandler("slow-enter");
+			QEventLoop loop;
+			QTimer::singleShot(200, &loop, &QEventLoop::quit);
+			loop.exec(QEventLoop::ExcludeUserInputEvents);
+			--g_depth;
+			g_events << "slow-exit";
+			return lmms::AiToolRegistry::ok({{"slow", true}});
+		}});
 		reg.add({"echo", "", {{"type", "object"}}, [](const QJsonObject& a) { return lmms::AiToolRegistry::ok({{"args", a}}); }});
 	}
 
@@ -137,6 +167,26 @@ private slots:
 		QVERIFY(QTest::qWaitFor([&] { return s.canReadLine(); }, 5000));
 		QVERIFY(QJsonDocument::fromJson(s.readLine()).object()["error"].toString().contains("long"));
 		QVERIFY(QTest::qWaitFor([&] { return s.state() == QAbstractSocket::UnconnectedState; }, 3000));
+	}
+	//! A handler that spins its own event loop (render does) must not be re-entered, and a client
+	//! that connects and sends while it runs must still be answered, after the running handler.
+	void handlerNestedLoopDoesNotReenter()
+	{
+		QTemporaryDir dir; lmms::AiAgentServer srv; QVERIFY(srv.start(&reg, dir.path() + "/a.json"));
+		g_depth = 0; g_maxDepth = 0; g_events.clear();
+		QTcpSocket a; QVERIFY(connectClient(a, srv));
+		a.write(line(request(srv, "slow", "A")));
+		QTest::qWait(50); // the slow handler is now inside its nested loop
+		QTcpSocket b; QVERIFY(connectClient(b, srv));
+		b.write(line(request(srv, "ping", "B")));
+		QVERIFY(QTest::qWaitFor([&] { return a.canReadLine(); }, 3000));
+		QCOMPARE(QJsonDocument::fromJson(a.readLine()).object()["id"].toString(), QString("A"));
+		QVERIFY(QTest::qWaitFor([&] { return b.canReadLine(); }, 3000));
+		QCOMPARE(QJsonDocument::fromJson(b.readLine()).object()["id"].toString(), QString("B"));
+		// Server-side proof, immune to client-side polling races: B's ping ran after the slow
+		// handler returned, not inside its nested loop, and no handler ever nested inside another.
+		QCOMPARE(g_events, QStringList({"slow-enter", "slow-exit", "ping"}));
+		QCOMPARE(g_maxDepth, 1);
 	}
 };
 
