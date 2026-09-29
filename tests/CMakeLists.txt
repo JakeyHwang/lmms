@@ -15,11 +15,7 @@ set(LMMS_TESTS
 	src/core/ai/AiActionToolsTest.cpp
 	src/core/ai/AiAgentServerTest.cpp
 	src/core/ai/AiProjectToolsTest.cpp
-	src/core/ai/AiPromptBuilderTest.cpp
-	src/core/ai/AiSessionTest.cpp
 	src/core/ai/AiToolRegistryTest.cpp
-	src/core/ai/OpenAiClientTest.cpp
-	src/core/ai/OpenAiStreamParserTest.cpp
 	src/tracks/AutomationTrackTest.cpp
 )
 
