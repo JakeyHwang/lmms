@@ -214,6 +214,23 @@ private slots:
 		QVERIFY(f.open(QIODevice::ReadOnly));
 		QCOMPARE(f.read(4), QByteArray("MThd"));
 	}
+	void importMidiRejectsBadInput()
+	{
+		QVERIFY(!reg.call("import_midi", {})["ok"].toBool());
+		QVERIFY(!reg.call("import_midi", {{"path", forbidden.path() + "/x.mid"}})["ok"].toBool());
+		QVERIFY(!reg.call("import_midi", {{"path", allowed.path() + "/missing.mid"}})["ok"].toBool());
+		QFile junk(allowed.path() + "/junk.mid");
+		QVERIFY(junk.open(QIODevice::WriteOnly)); junk.write("hello"); junk.close();
+		auto r = reg.call("import_midi", {{"path", junk.fileName()}});
+		QVERIFY(!r["ok"].toBool());
+		QVERIFY(r["error"].toString().contains("MThd"));
+		QFile mid(allowed.path() + "/real.mid");
+		QVERIFY(mid.open(QIODevice::WriteOnly)); mid.write("MThd"); mid.close();
+		auto sf = reg.call("import_midi", {{"path", mid.fileName()}, {"soundfont", forbidden.path() + "/x.sf2"}});
+		QVERIFY(!sf["ok"].toBool());
+		QVERIFY(sf["error"].toString().contains("not allowed"));
+		QCOMPARE(int(song()->tracks().size()), 0);
+	}
 	void renderWritesWav()
 	{
 		// An empty project still renders one bar of silence past its (zero) length.

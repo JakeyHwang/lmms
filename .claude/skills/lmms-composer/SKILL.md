@@ -52,18 +52,53 @@ stdout, errors to stderr. Use the CLI for one-off calls; use the Python module f
 
 ## Research first
 
-**A named song or artist** — research before touching the project. Use `web_search` and at least
-two independent sources for: tempo (BPM), key, chord progression *per section*, form with bar counts,
-instrumentation, and the feel (groove, dynamics, production). State the findings with their sources
-in one short block, then build. Never guess a named song's tempo or key — if sources disagree, say
-which you took and why.
+**A named song** — the goal is a faithful recreation, so look for the real thing before writing a
+note, in this order, and say what you found with sources:
+
+1. **A MIDI transcription.** `web_search "<artist> <title> midi"` — BitMidi (`bitmidi.com/uploads/<id>.mid`,
+   needs a browser `User-Agent` + `Referer` header), midiworld, freemidi, mididb demos, Nonstop2k
+   (paid). Download every candidate into `<workingdir>/samples/midi/` and inspect it *before*
+   importing (format, ppq, tempo, tracks with note counts / channels / programs — a 40-line stdlib
+   parser does it; channel 10 = drums). Pick the one whose track list matches the record's
+   instrumentation, not the biggest file. Then `import_midi` with the SoundFont path; each channel
+   becomes an `sf2player` track, program changes become patches.
+2. **Scores and tabs** when no usable MIDI exists, or to fix what the MIDI got wrong: Ultimate
+   Guitar tabs (`read` the page — picking patterns, voicings, strum direction), drum tabs, MuseScore
+   / Hooktheory (melody and rhythm), sheet-music previews. Write the parts from them with the flow
+   rules below.
+3. **Facts either way:** tempo (BPM), key, chord progression *per section*, form with bar counts,
+   instrumentation and feel, from at least two independent sources. Never guess a named song's
+   tempo or key; if sources disagree, say which you took and why.
 
 **A genre or mood** — pick a recipe from `references/theory.md`, name it ("house, 126 BPM,
 four-on-the-floor"), and build. No search needed.
 
-Melodies are written from that research and by ear: same key, same harmonic motion, same phrase
-lengths and feel. Do not transcribe a copyrighted melody note-for-note; the result is an original
-arrangement in the style. Say so in one line when the request named a real song.
+After an import: `get_project_summary`, then re-voice (replace karaoke lead instruments such as pan
+flute with the record's instrument via `set_params` on `patch`, or a fresh `add_sf2_track` + moved
+notes), remove empty or duplicate tracks, fix levels and pans, and keep the imported tempo
+automation unless it is wrong. The result is the user's private recreation; say in one line that it
+is derived from a transcription.
+
+## Making it flow (read before writing any part by hand)
+
+Notes that are "just notes" come from short, isolated, equal-velocity events. Real players connect:
+
+- **Let ring.** Arpeggios and picked chords sustain until the chord changes: `len` runs to the end of
+  the chord, so notes overlap and ring as a chord. Piano and pad chords likewise.
+- **Strums are not simultaneous.** Offset the strings of one chord 2-3 ticks apart, low to high on
+  a down-stroke, reversed on an up-stroke, with the later strings a little quieter.
+- **Connected rhythm parts.** Chugs, 8th-note bass, comping: `len` reaches the next note (a 2-4 tick
+  gap at most). Accent on-beat notes (+12 vol), lighten off-beats. Let the last chord of a phrase
+  ring across the bar line now and then.
+- **Legato bass with approach notes.** Notes touch; step into the next chord's root by a semitone
+  or from the fifth on the last 8th of the bar.
+- **Contour, not lines.** Velocities follow the phrase (rise into the bar, fall out of it); ±3 tick
+  timing humanisation on hats, arpeggios and melody; ghost notes on the snare; open hat lifting into
+  the next bar.
+- **Glue.** A sustained strings or pad layer at 40-55 volume under the loud sections, held across
+  the chord, is what makes a section "sway".
+- **Melody is legato by default.** Each note's `len` runs until the next starts (+4 ticks); breathe
+  at phrase ends only.
 
 ## Build order
 

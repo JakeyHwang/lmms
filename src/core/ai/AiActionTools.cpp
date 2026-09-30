@@ -33,8 +33,11 @@
 #include <QFileInfo>
 #include <memory>
 
+#include "ConfigManager.h"
 #include "ExportFilter.h"
+#include "ImportFilter.h"
 #include "PatternStore.h"
+#include "PluginFactory.h"
 
 #include "AiToolHelpers.h"
 #include "AudioEngine.h"
@@ -188,6 +191,44 @@ static QJsonObject exportMidi(const QJsonObject& a, const PathAllowed& pathAllow
 	return R::ok({{"path", path}, {"bytes", QFileInfo(path).size()}});
 }
 
+//! Standard MIDI File into the open song through the midiimport plugin (File > Import). Each MIDI
+//! channel becomes an sf2player track on the default SoundFont (channel 10 → bank 128), plus
+//! automation tracks for tempo and time signature. Every failure the plugin would report with a
+//! modal dialog is checked here first, so the handler never blocks on one.
+static QJsonObject importMidi(const QJsonObject& a, const PathAllowed& pathAllowed)
+{
+	auto song = Engine::getSong();
+	if (song->isPlaying() || song->isExporting()) { return R::error("Stop playback before importing"); }
+	const QString path = a["path"].toString();
+	if (path.isEmpty()) { return R::error("path is required"); }
+	if (pathAllowed && !pathAllowed(path)) { return R::error("Path not allowed: " + path); }
+	QFile f(path);
+	if (!f.open(QIODevice::ReadOnly)) { return R::error("Cannot read: " + path); }
+	const QByteArray magic = f.read(4);
+	if (magic != "MThd" && magic != "RIFF") { return R::error("Not a Standard MIDI File (no MThd header): " + path); }
+	if (a.contains("soundfont"))
+	{
+		const QString sf = a["soundfont"].toString();
+		if (pathAllowed && !pathAllowed(sf)) { return R::error("Path not allowed: " + sf); }
+		if (!QFileInfo(sf).isFile()) { return R::error("No such file: " + sf); }
+		ConfigManager::inst()->setSF2File(sf);
+	}
+	if (ConfigManager::inst()->sf2File().isEmpty())
+	{
+		return R::error("No default SoundFont set; pass soundfont (absolute .sf2 path) once, or set it in Settings > Paths");
+	}
+	if (PluginFactory::instance()->pluginInfo("midiimport").isNull()) { return R::error("midiimport plugin is not available in this build"); }
+	const int before = int(song->tracks().size());
+	ImportFilter::import(path, song); // never guard: Track::create takes the change lock itself
+	QJsonArray added;
+	for (int i = before; i < int(song->tracks().size()); ++i)
+	{
+		added.append(QJsonObject{{"index", i}, {"name", song->tracks()[i]->name()}});
+	}
+	if (added.isEmpty()) { return R::error("Import added no tracks: " + path); }
+	return R::ok({{"tracksAdded", added.size()}, {"tracks", added}});
+}
+
 static QJsonObject newProject(const QJsonObject& a)
 {
 	auto song = Engine::getSong();
@@ -231,6 +272,13 @@ void registerAiActionTools(AiToolRegistry& r, PathAllowed pathAllowed)
 		"Gotcha: instrument sounds are not carried over; the receiving app assigns its own. Pair it with render for a reference mix.",
 		schema({{"path", prop("string", "output path; .mid is appended when missing")}}, {"path"}),
 		[pathAllowed](const QJsonObject& a) { return exportMidi(a, pathAllowed); }});
+	r.add({"import_midi",
+		"WHAT: load a Standard MIDI File into the open song: one sf2player track per MIDI channel on the default SoundFont (channel 10 → drum bank 128, program changes → patches), "
+		"plus automation tracks for tempo and time signature. WHEN: a transcription of the target song exists as .mid — the most faithful starting point; re-voice, trim and mix afterwards. "
+		"RETURNS {tracksAdded, tracks:[{index,name}]}. Gotcha: needs a default SoundFont (pass soundfont once); tracks are appended after the existing ones; the file's tempo overrides set_head.",
+		schema({{"path", prop("string", "absolute path to the .mid")},
+			{"soundfont", prop("string", "absolute .sf2 path to use as the default SoundFont for imported tracks")}}, {"path"}),
+		[pathAllowed](const QJsonObject& a) { return importMidi(a, pathAllowed); }});
 	r.add({"new_project",
 		"WHAT: discard the current project and load the default template (one TripleOscillator, sample, pattern and automation track). WHEN: the user wants to start over; otherwise build in the open project. "
 		"RETURNS {tracks}. Gotcha: refused while there are unsaved changes unless discardChanges:true; the default tracks are empty, so remove or reuse them.",

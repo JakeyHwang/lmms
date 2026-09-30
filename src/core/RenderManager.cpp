@@ -61,6 +61,9 @@ void RenderManager::abortProcessing()
 // Called to render each new track when rendering tracks individually.
 void RenderManager::renderNextTrack()
 {
+	// QThread::finished is emitted from the render thread just before it exits; destroying the
+	// QThread while that thread is still winding down is fatal, so join it first.
+	if (m_activeRenderer) { m_activeRenderer->wait(); }
 	m_activeRenderer.reset();
 
 	if (m_tracksToRender.empty())
