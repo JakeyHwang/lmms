@@ -69,7 +69,7 @@ Entry points:
   control LMMS over localhost"* (i.e. `<ai agentserver="0"/>` in `.lmmsrc.xml`) to disable it.
   Start `build/lmms.exe`, wait for
   `AiAgentServer: listening on 127.0.0.1:<port>`, then
-  `python .claude/skills/lmms-composer/scripts/lmmsctl.py tools` — it lists **36** tools.
+  `python .claude/skills/lmms-composer/scripts/lmmsctl.py tools` — it lists **37** tools.
   `check_render.py` sanity-checks the resulting `.wav` (peak dBFS, clipped samples, silent bars).
 - Local build in this fork is MSYS2 CLANG64 + Ninja in `build/`. A plain login shell has no `cmake`
   on `PATH`; the working form is
@@ -193,21 +193,30 @@ The server is started late on purpose: `GuiApplication::startAgentServer()` is c
 the first request can never land while the song is being set up (the old constructor-time start
 let an agent remove tracks that project setup then deleted again).
 
-**36 registered tools**, across four tables: `add_automation`, `add_clips`, `add_effect`,
+**37 registered tools**, across four tables: `add_automation`, `add_clips`, `add_effect`,
 `add_instrument_track`, `add_notes`, `add_sample_clip`, `add_sf2_track`, `add_track`, `checkpoint`,
 `commit`, `describe_model_tree`, `export_midi`, `get_head`, `get_mixer_xml`, `get_preset_xml`,
-`get_project_summary`, `get_track_xml`, `list_effects`, `list_instruments`, `list_presets`,
-`list_samples`, `list_tools`, `new_project`, `ping`, `play`, `remove_clip`, `remove_track`,
-`render`, `replace_track`, `revert`, `save`, `set_head`, `set_mixer_xml`, `set_params`, `set_track`,
-`stop`. Registration order is project (20), discovery (5), action (6), meta (5) —
-`src/gui/GuiApplication.cpp:232-235`. XML tool results cap at 64 KB (`MaxXmlBytes`,
+`get_project_summary`, `get_track_xml`, `import_midi`, `list_effects`, `list_instruments`,
+`list_presets`, `list_samples`, `list_tools`, `new_project`, `ping`, `play`, `remove_clip`,
+`remove_track`, `render`, `replace_track`, `revert`, `save`, `set_head`, `set_mixer_xml`,
+`set_params`, `set_track`, `stop`. Registration order is project (20), discovery (5), action (7),
+meta (5) — `src/gui/GuiApplication.cpp:232-235`. XML tool results cap at 64 KB (`MaxXmlBytes`,
 `src/core/ai/AiProjectTools.cpp:350`). `.claude/skills/lmms-composer/references/tools.md` documents
-all 36 in prose; `lmmsctl.py tools --schema` is the authoritative schema.
+all 37 in prose; `lmmsctl.py tools --schema` is the authoritative schema.
 
-`export_midi` (`src/core/ai/AiActionTools.cpp:171-189`) is the DAW hand-off: it instantiates the
+`export_midi` (`src/core/ai/AiActionTools.cpp:174-192`) is the DAW hand-off: it instantiates the
 `midiexport` plugin directly and calls `ExportFilter::tryExport` over `Song::tracks()` plus
 `Engine::patternStore()->tracks()`, rather than `Song::exportProjectMidi()`, which swallows
 failures. Same path-policy and `outputPathError` gate as `save`/`render`; returns `{path, bytes}`.
+`import_midi` (`:198-230`) is the other direction, and the faithful-recreation entry point: it
+drives the `midiimport` plugin through `ImportFilter::import` (the File → Import path), so each MIDI
+channel becomes an `sf2player` track on the default SoundFont, channel 10 on drum bank 128, plus
+tempo and time-signature automation tracks. It returns `{tracksAdded, tracks:[{index,name}]}` and
+checks up front every condition the plugin would otherwise report in a **modal dialog** — playback
+stopped, path allowed, file readable, `MThd`/`RIFF` magic, a default SoundFont set
+(`ConfigManager::setSF2File` when `soundfont` is passed), plugin present — because a handler that
+blocks on a dialog hangs the server. `ImportFilter::import` is deliberately *not* wrapped in a
+change guard: `Track::create` takes the change lock itself.
 
 **Undo/redo is now explicit, not per-turn.** `AiProjectSnapshot` holds one whole-project buffer:
 `checkpoint` calls `take()` (`Song::saveProjectData(DataFile&)`, `include/Song.h:256`, and turns
@@ -216,13 +225,19 @@ journalling off), `revert` calls `restore()` (writes a temp file, **fails if the
 "No checkpoint held" when none is.
 `AiSession`'s automatic per-turn revert went with the session.
 
-Two engine-wide changes predate the cutover and survive it: `EffectChain::effects()`
-(`include/EffectChain.h:70`), and `DataFile::findProblematicLadspaPlugins()` raising its modal
+Three engine-wide changes are not agent-specific: `EffectChain::effects()`
+(`include/EffectChain.h:70`); `DataFile::findProblematicLadspaPlugins()` raising its modal
 warning only when a GUI exists *and* the `DataFile` came from a file
-(`src/core/DataFile.cpp:2041-2043`), so in-memory parses cannot block on a dialog.
+(`src/core/DataFile.cpp:2041-2043`), so in-memory parses cannot block on a dialog; and
+`RenderManager::renderNextTrack()` now `wait()`ing on the active `ProjectRenderer` before
+`m_activeRenderer.reset()` (`src/core/RenderManager.cpp:64-66`). `QThread::finished` is emitted
+*from* the render thread just before it exits, so the slot ran while the thread was still winding
+down and destroying it there was fatal — an intermittent crash on back-to-back renders, in the
+File → Export path as much as in `render`.
 
-Deviations from the 2026-09-29 design, both approved mid-run and recorded as controller rulings in
-`.superpowers/sdd/2026-09-29-agent-harness/progress.md:54-55`:
+Deviations from the 2026-09-29 design, both approved mid-run as controller rulings. The run
+directory that held them (`.superpowers/sdd/2026-09-29-agent-harness/`) has since been deleted, so
+these two lines are now the only record:
 
 - `lmmsctl.py` resolves the token file from a **candidate list** rather than the design's single
   `<workingdir>/.lmms-agent.json`, because a dev build's `.lmmsrc.xml` is not in `$HOME`.
@@ -234,6 +249,6 @@ One requirement from the *old* design lapsed rather than being decided: §4 (`:1
 `src/core/ai/` is `moveTrackView` for `replace_track` positioning
 (`src/core/ai/AiProjectTools.cpp:428`). The Song Editor survived the cutover, so this is still open.
 The old `render`-blocking deviation is **closed**: the nested
-`loop.exec(QEventLoop::ExcludeUserInputEvents)` (`src/core/ai/AiActionTools.cpp:138`) is what the
+`loop.exec(QEventLoop::ExcludeUserInputEvents)` (`src/core/ai/AiActionTools.cpp:141`) is what the
 harness design §6 approves. Do not re-raise it.
 <!-- /claude:auto:active-specs -->

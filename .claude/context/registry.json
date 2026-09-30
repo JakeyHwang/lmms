@@ -2,8 +2,8 @@
   "version": 1,
   "repo": "lmms",
   "bootstrappedAt": "2026-09-16",
-  "lastSyncedCommit": "2fd75de3e",
-  "lastSyncedRange": "b6e85ef69bb4915baa7defadba62a2c828f62b68..2fd75de3e27bdb8e3896084639277341846a9237",
+  "lastSyncedCommit": "c15632ec4",
+  "lastSyncedRange": "55c360ebf2491076101694b476cb7ac1af2ace75..c15632ec4eae1895e9b6f087d5869cbd52f31cca",
   "fenceFormat": {
     "open": "<!-- claude:auto:<slug> -->",
     "close": "<!-- /claude:auto:<slug> -->"
@@ -40,8 +40,8 @@
     },
     {
       "path": ".claude/skills/lmms-composer/**",
-      "reason": "agent-authored skill content owned by its implementing task, not steward-managed. Read it for evidence (tool count, frontmatter, token-file rule); never rewrite it. A drift between its 36 tool sections and the registry is a reported finding, not a steward edit.",
-      "revisitIf": "the user asks the steward to own the skill's docs"
+      "reason": "agent-authored skill content owned by its implementing task, not steward-managed. Read it for evidence (tool count, frontmatter, token-file rule). Default: never rewrite it; a drift between its tool sections and the registry is a reported finding. EXCEPTION 2026-09-30: the import_midi dispatch explicitly instructed the steward to add the '### import_midi' section to references/tools.md and bump the 36 -> 37 counts there and in SKILL.md, because the implementing agent left tools.md stale. Do not generalise that into standing ownership.",
+      "revisitIf": "the user asks the steward to own the skill's docs outright"
     },
     {
       "path": ".superpowers/sdd/",
@@ -109,6 +109,14 @@
     "2026-09-30 ANCHOR SHIFT: four #include lines were added at the top of AiActionTools.cpp this range, so everything below shifted +4. The approved render-blocking loop.exec(QEventLoop::ExcludeUserInputEvents) is now AiActionTools.cpp:138 (was :130-134) and CLAUDE.md section active-specs was corrected. Re-verified UNSHIFTED: AiProjectTools.cpp:350 (MaxXmlBytes), :428 (moveTrackView), :441-458 (deleteTrack), GuiApplication.cpp:232-235, main.cpp:915, AiAgentServer.cpp:75-77.",
     "2026-09-30: the 2026-09-29 harness spec's section 3 tool table gained an export_midi row (:144) on explicit dispatch instruction - the second time a fence-free edit to that spec was directed (the first was section 6's start-up bullet). The row is labelled 'added after this design landed' so the file still reads as the approved design. Do not extend this into a habit without an explicit instruction.",
     "2026-09-30 path sweep: every file, directory and command path named in CLAUDE.md and PROJECT_CONTEXT.md resolves against the tree at 2fd75de3e. No path went dead this range (4 files, all modified, none added/deleted/renamed). New paths verified to exist: plugins/MidiExport, include/ExportFilter.h, include/PatternStore.h. src/core/ai/ holds 10 entries; tests/CMakeLists.txt holds 13.",
-    "2026-09-30 below floor, recorded: export_midi's write path has no headless coverage - exportMidiWritesFile QSKIPs when PluginFactory::pluginInfo('midiexport') is null, which is the case in this build (AiActionToolsTest.cpp:205). Same class as every other plugin-dependent tool case; not a new deviation."
+    "2026-09-30 below floor, recorded: export_midi's write path has no headless coverage - exportMidiWritesFile QSKIPs when PluginFactory::pluginInfo('midiexport') is null, which is the case in this build (AiActionToolsTest.cpp:205). Same class as every other plugin-dependent tool case; not a new deviation.",
+    "2026-09-30 range 55c360ebf..c15632ec4, 4 files +111/-8, all modified: import_midi added to the action table (src/core/ai/AiActionTools.cpp:198-230 and :275-281), one case added to AiActionToolsTest (:217-233), SKILL.md rewritten around MIDI-transcription-first research plus a new 'Making it flow' section, and src/core/RenderManager.cpp:64-66 given a wait() before reset(). Tool count 36 -> 37, action table 6 -> 7, tools.md ### count 37. Counted from 'r.add({\"' : project 20, discovery 5, action 7, meta 5.",
+    "2026-09-30 ANCHOR SHIFT: three #include lines (ConfigManager.h, ImportFilter.h, PluginFactory.h) were added at the top of AiActionTools.cpp, so everything below shifted +3. The approved render-blocking loop.exec is now AiActionTools.cpp:141 (was :138); exportMidi is :174-192 (was :171-189); importMidi is :198-230. CLAUDE.md section active-specs corrected. Re-verified UNSHIFTED by sed: AiProjectTools.cpp:350 (MaxXmlBytes), :428 (moveTrackView), GuiApplication.cpp:232-235, main.cpp:915, AiAgentServer.cpp:47-50 and :75-77, DataFile.cpp:2041-2043.",
+    "2026-09-30: the implementing agent did NOT update references/tools.md for import_midi, so standing trigger 5 (registry count vs tools.md ### count) tripped for the first time in practice - registry 37, doc 36. The dispatch instructed the steward to repair it; see the skipped-entry exception. Keep the trigger: it works.",
+    "2026-09-30: RenderManager::renderNextTrack() wait()-before-reset() is ENGINE-WIDE, not agent-specific - it is filed in CLAUDE.md section active-specs alongside EffectChain::effects() and the findProblematicLadspaPlugins GUI guard, now 'three engine-wide changes'. QThread::finished is emitted from the render thread before it exits, so the old reset() destroyed a still-winding-down thread; the crash hit File > Export as much as the render tool. No test covers it (nothing in tests/ exercises renderNextTrack teardown) - recorded below floor.",
+    "2026-09-30: the 2026-09-29 harness spec's section 3 tool table gained an import_midi row (:145) on explicit dispatch instruction - the third directed fence-free edit to that spec (section 6 start-up bullet, export_midi row, import_midi row). Labelled 'added after this design landed'. Still not a habit without an explicit instruction.",
+    "2026-09-30 path sweep: every file, directory and command path named in CLAUDE.md and PROJECT_CONTEXT.md was re-resolved against the tree at c15632ec4. The diff itself killed nothing (4 files, all modified), but the sweep caught one path that died OUTSIDE the diff: .superpowers/sdd/2026-09-29-agent-harness/ - see the DEAD PATH note below. New paths verified to exist: plugins/MidiImport, include/ImportFilter.h. src/core/ai/ holds 10 entries; tests/CMakeLists.txt holds 13.",
+    "2026-09-30 TRIGGER ROTATION: PROJECT_CONTEXT's standing trigger about window-level shortcuts vs editors' keyPressEvent was dropped from the 5-slot list - it is already promoted durably into CLAUDE.md section code-layout (:115). Its slot went to a new trigger: a tool handler that can reach a modal dialog on the GUI thread hangs the single-threaded server. import_midi's pre-checks (AiActionTools.cpp:200-220) are the worked example.",
+    "2026-09-30 DEAD PATH: .superpowers/sdd/2026-09-29-agent-harness/ has been deleted (only 2026-09-16-ai-composer/ remains under .superpowers/sdd/). Every progress.md:NN citation to it was pruned this sync - one in CLAUDE.md section active-specs, three in PROJECT_CONTEXT. The two controller rulings it recorded survive as CLAUDE.md prose; the 13/13 C++ / 13 Python / render rc=0 figure is no longer citable and is marked as such. Notes above that cite progress.md line numbers are historical and were left as written."
   ]
 }

@@ -10,7 +10,7 @@ producer: you decide tempo, key, form and sounds, you state the decision in one 
 the whole arrangement — not a loop.
 
 `references/theory.md` — keys, ticks, scales, chords, progressions, GM patch and drum tables, genre
-recipes. `references/tools.md` — all 36 tools, readable. `lmmsctl.py tools --schema` is the
+recipes. `references/tools.md` — all 37 tools, readable. `lmmsctl.py tools --schema` is the
 authoritative schema.
 
 ## Connect
@@ -22,7 +22,7 @@ authoritative schema.
    `hub start name=lmms application=C:/git_repos/lmms/build/lmms.exe ready.log="AiAgentServer: listening"`.
    The ready line is `AiAgentServer: listening on 127.0.0.1:<port>, token file <path>`.
 3. Handshake: `python .claude/skills/lmms-composer/scripts/lmmsctl.py call ping` → `{"ok": true,
-   "version": "…"}`. Then `… lmmsctl.py tools` — it must list **36** tools.
+   "version": "…"}`. Then `… lmmsctl.py tools` — it must list **37** tools.
 
 The client finds LMMS through the token file `{"port", "token"}` named `.lmms-agent.json`, written
 in the LMMS working directory. It is looked for in this order, first hit wins: `$LMMS_AGENT_FILE`

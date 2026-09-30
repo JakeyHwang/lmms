@@ -1,7 +1,7 @@
 # Tool reference
 
 `python scripts/lmmsctl.py tools --schema` prints the **authoritative** JSON schema straight from the
-running LMMS. This file is the readable companion: 36 tools, what each is for, its arguments, what it
+running LMMS. This file is the readable companion: 37 tools, what each is for, its arguments, what it
 returns, and the mistake that bites.
 
 Every result is an object with `ok`. `Lmms.call()` hands it back as-is; `Lmms.ok()` raises
@@ -26,7 +26,7 @@ Every tool with its JSON schema, in OpenAI function format. `lmmsctl.py tools` w
 
 - **Args:** none.
 - **Returns:** `{ok, tools: [{type, function: {name, description, parameters}}]}`.
-- **Gotcha:** the count is the ground truth for whether the build has all 36 tools.
+- **Gotcha:** the count is the ground truth for whether the build has all 37 tools.
 
 ### checkpoint
 
@@ -370,6 +370,23 @@ tempo only. For GarageBand, Logic, or any DAW that should get editable notes.
   assigns its own; pair it with `render` for a reference mix. LMMS's exporter appends one empty
   track from the pattern store ("Kicker"); the importer can delete it. Drum tracks use GM drum keys,
   so put them on a Drums track in the target app.
+
+### import_midi
+
+Load a Standard MIDI File into the open song — the most faithful starting point when a
+transcription of the target song exists. One `sf2player` track per MIDI channel on the default
+SoundFont, program changes become patches, plus automation tracks for tempo and time signature.
+
+- **Args:** `path` (string, **required**) — absolute path to the `.mid`; `soundfont` (string) —
+  absolute `.sf2` path to set as the default SoundFont for the imported tracks.
+- **Returns:** `{tracksAdded, tracks: [{index, name}]}`.
+- **Gotcha:** a default SoundFont must be set or the import produces silent tracks — pass
+  `soundfont` once (it is stored in the config) or set it in *Settings → Paths*. Tracks are
+  **appended** after the existing ones, so indices before the import are unchanged. Channel 10
+  becomes GM drum bank 128. The file's own tempo lands as tempo automation and **overrides**
+  anything `set_head` put there. Playback must be stopped, the path must be under a policy root,
+  and the file must start with an `MThd` (or `RIFF`) header. Re-voice the karaoke-grade default
+  patches afterwards with `set_params` on `patch`.
 
 ### new_project
 
